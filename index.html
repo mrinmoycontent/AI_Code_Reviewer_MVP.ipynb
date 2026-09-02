@@ -112,6 +112,11 @@
       display: none;
     }
 
+    .run {
+      background: #0891b2;
+      color: white;
+    }
+
     .clear {
       background: #64748b;
       color: white;
@@ -132,11 +137,20 @@
       font-weight: bold;
     }
 
-    #result {
+    #result,
+    #runResult {
       display: none;
       white-space: pre-wrap;
       line-height: 1.7;
-      font-family: Arial, sans-serif;
+    }
+
+    #runResult {
+      font-family: monospace;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 18px;
+      border-radius: 10px;
+      margin-top: 15px;
     }
 
     .success {
@@ -147,6 +161,15 @@
       background: #dcfce7;
       color: #166534;
       font-weight: bold;
+    }
+
+    .warning {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 14px;
     }
 
     .footer {
@@ -182,7 +205,7 @@
 
   <div class="header">
     <h1>🤖 AI Code Reviewer & Auto-Fixer</h1>
-    <p>Review, analyze, fix and improve your code with AI.</p>
+    <p>Review, analyze, fix and test your code with AI.</p>
   </div>
 
   <div class="card">
@@ -200,14 +223,7 @@
 
     <label for="code">Your Code</label>
 
-    <textarea id="code">def calculate_discount(price, discount):
-    final_price = price - (price * discount)
-    return final_price
-
-price = "100"
-discount = 20
-
-print(calculate_discount(price, discount))</textarea>
+    <textarea id="code"></textarea>
 
     <div class="buttons">
 
@@ -233,6 +249,13 @@ print(calculate_discount(price, discount))</textarea>
       </button>
 
       <button
+        id="runButton"
+        class="run"
+        onclick="runCode()">
+        ▶️ Run / Test
+      </button>
+
+      <button
         id="clearButton"
         class="clear"
         onclick="clearAll()">
@@ -242,7 +265,7 @@ print(calculate_discount(price, discount))</textarea>
     </div>
 
     <div class="loading" id="loading">
-      🔍 AI is working...
+      🤖 AI is working...
     </div>
 
     <div class="success" id="successMessage">
@@ -258,6 +281,19 @@ print(calculate_discount(price, discount))</textarea>
     <div id="result">
       Your AI result will appear here.
     </div>
+
+  </div>
+
+  <div class="card">
+
+    <h2>▶️ Test Result</h2>
+
+    <div class="warning">
+      ⚠️ Run / Test currently performs a safe AI-based code validation.
+      It does not execute arbitrary code directly on the server.
+    </div>
+
+    <div id="runResult"></div>
 
   </div>
 
@@ -448,10 +484,81 @@ function applyFix() {
 
   document.getElementById("applyButton").style.display = "none";
 
+  document.getElementById("runResult").style.display = "none";
+
   window.scrollTo({
     top: 0,
     behavior: "smooth"
   });
+}
+
+
+/* =========================
+   RUN / TEST CODE
+========================= */
+
+async function runCode() {
+
+  const code = document.getElementById("code").value.trim();
+  const language = document.getElementById("language").value;
+
+  if (!code) {
+    alert("Please enter some code.");
+    return;
+  }
+
+  const loading = document.getElementById("loading");
+  const runResult = document.getElementById("runResult");
+
+  loading.textContent = "▶️ AI is testing your code...";
+  loading.style.display = "block";
+
+  runResult.style.display = "none";
+
+  setButtonsDisabled(true);
+
+  try {
+
+    const response = await fetch("/api/review", {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        code: code,
+        language: language
+      })
+
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Code test failed.");
+    }
+
+    runResult.textContent =
+      "✅ Safe AI validation completed.\n\n" +
+      data.result;
+
+    runResult.style.display = "block";
+
+  } catch (error) {
+
+    runResult.textContent =
+      "❌ Test failed.\n\n" + error.message;
+
+    runResult.style.display = "block";
+
+  } finally {
+
+    loading.style.display = "none";
+    setButtonsDisabled(false);
+
+  }
 }
 
 
@@ -467,6 +574,10 @@ function clearAll() {
     "Your AI result will appear here.";
 
   document.getElementById("result").style.display = "none";
+
+  document.getElementById("runResult").textContent = "";
+
+  document.getElementById("runResult").style.display = "none";
 
   document.getElementById("applyButton").style.display = "none";
 
@@ -489,6 +600,8 @@ function setButtonsDisabled(disabled) {
   document.getElementById("fixButton").disabled = disabled;
 
   document.getElementById("applyButton").disabled = disabled;
+
+  document.getElementById("runButton").disabled = disabled;
 
   document.getElementById("clearButton").disabled = disabled;
 
