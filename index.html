@@ -274,6 +274,7 @@
 
   </div>
 
+
   <div class="card">
 
     <h2>📋 AI Review</h2>
@@ -284,18 +285,20 @@
 
   </div>
 
+
   <div class="card">
 
     <h2>▶️ Test Result</h2>
 
     <div class="warning">
-      ⚠️ Run / Test currently performs a safe AI-based code validation.
-      It does not execute arbitrary code directly on the server.
+      ⚠️ Safe test mode is enabled. User code is not executed directly
+      on the server.
     </div>
 
     <div id="runResult"></div>
 
   </div>
+
 
   <div class="footer">
     AI Code Reviewer & Auto-Fixer • Portfolio Project
@@ -309,9 +312,9 @@
 let latestFixedCode = "";
 
 
-/* =========================
+/* =========================================================
    REVIEW CODE
-========================= */
+========================================================= */
 
 async function reviewCode() {
 
@@ -326,12 +329,15 @@ async function reviewCode() {
   const loading = document.getElementById("loading");
   const result = document.getElementById("result");
 
-  loading.textContent = "🔍 AI is reviewing your code...";
+  loading.textContent =
+    "🔍 AI is reviewing your code...";
+
   loading.style.display = "block";
 
   result.style.display = "none";
 
-  document.getElementById("applyButton").style.display = "none";
+  document.getElementById("applyButton").style.display =
+    "none";
 
   setButtonsDisabled(true);
 
@@ -355,29 +361,35 @@ async function reviewCode() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Review failed.");
+      throw new Error(
+        data.error || "Review failed."
+      );
     }
 
     result.textContent = data.result;
+
     result.style.display = "block";
 
   } catch (error) {
 
-    result.textContent = "❌ " + error.message;
+    result.textContent =
+      "❌ " + error.message;
+
     result.style.display = "block";
 
   } finally {
 
     loading.style.display = "none";
+
     setButtonsDisabled(false);
 
   }
 }
 
 
-/* =========================
+/* =========================================================
    GENERATE FIX
-========================= */
+========================================================= */
 
 async function generateFix() {
 
@@ -391,15 +403,20 @@ async function generateFix() {
 
   const loading = document.getElementById("loading");
   const result = document.getElementById("result");
-  const success = document.getElementById("successMessage");
+  const success =
+    document.getElementById("successMessage");
 
-  loading.textContent = "🛠️ AI is generating a fix...";
+  loading.textContent =
+    "🛠️ AI is generating a fix...";
+
   loading.style.display = "block";
 
   result.style.display = "none";
+
   success.style.display = "none";
 
-  document.getElementById("applyButton").style.display = "none";
+  document.getElementById("applyButton").style.display =
+    "none";
 
   setButtonsDisabled(true);
 
@@ -423,35 +440,46 @@ async function generateFix() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Fix generation failed.");
+      throw new Error(
+        data.error || "Fix generation failed."
+      );
     }
 
     result.textContent = data.result;
+
     result.style.display = "block";
 
-    latestFixedCode = extractFixedCode(data.result);
+    latestFixedCode =
+      extractFixedCode(data.result);
 
     if (latestFixedCode) {
-      document.getElementById("applyButton").style.display = "inline-block";
+
+      document.getElementById(
+        "applyButton"
+      ).style.display = "inline-block";
+
     }
 
   } catch (error) {
 
-    result.textContent = "❌ " + error.message;
+    result.textContent =
+      "❌ " + error.message;
+
     result.style.display = "block";
 
   } finally {
 
     loading.style.display = "none";
+
     setButtonsDisabled(false);
 
   }
 }
 
 
-/* =========================
+/* =========================================================
    EXTRACT FIXED CODE
-========================= */
+========================================================= */
 
 function extractFixedCode(text) {
 
@@ -467,24 +495,35 @@ function extractFixedCode(text) {
 }
 
 
-/* =========================
+/* =========================================================
    APPLY FIX
-========================= */
+========================================================= */
 
 function applyFix() {
 
   if (!latestFixedCode) {
-    alert("No corrected code is available.");
+
+    alert(
+      "No corrected code is available."
+    );
+
     return;
   }
 
-  document.getElementById("code").value = latestFixedCode;
+  document.getElementById("code").value =
+    latestFixedCode;
 
-  document.getElementById("successMessage").style.display = "block";
+  document.getElementById(
+    "successMessage"
+  ).style.display = "block";
 
-  document.getElementById("applyButton").style.display = "none";
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
 
-  document.getElementById("runResult").style.display = "none";
+  document.getElementById(
+    "runResult"
+  ).style.display = "none";
 
   window.scrollTo({
     top: 0,
@@ -493,9 +532,9 @@ function applyFix() {
 }
 
 
-/* =========================
+/* =========================================================
    RUN / TEST CODE
-========================= */
+========================================================= */
 
 async function runCode() {
 
@@ -503,14 +542,23 @@ async function runCode() {
   const language = document.getElementById("language").value;
 
   if (!code) {
-    alert("Please enter some code.");
+
+    alert(
+      "Please enter some code."
+    );
+
     return;
   }
 
-  const loading = document.getElementById("loading");
-  const runResult = document.getElementById("runResult");
+  const loading =
+    document.getElementById("loading");
 
-  loading.textContent = "▶️ AI is testing your code...";
+  const runResult =
+    document.getElementById("runResult");
+
+  loading.textContent =
+    "▶️ Testing your code...";
+
   loading.style.display = "block";
 
   runResult.style.display = "none";
@@ -519,7 +567,7 @@ async function runCode() {
 
   try {
 
-    const response = await fetch("/api/review", {
+    const response = await fetch("/api/run", {
 
       method: "POST",
 
@@ -537,73 +585,105 @@ async function runCode() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Code test failed.");
+
+      throw new Error(
+        data.error || "Code test failed."
+      );
+
     }
 
     runResult.textContent =
-      "✅ Safe AI validation completed.\n\n" +
-      data.result;
+      "✅ Test request successful.\n\n" +
+      "Language: " + data.language + "\n" +
+      "Status: " + data.status + "\n\n" +
+      data.message;
 
     runResult.style.display = "block";
 
   } catch (error) {
 
     runResult.textContent =
-      "❌ Test failed.\n\n" + error.message;
+      "❌ Test failed.\n\n" +
+      error.message;
 
     runResult.style.display = "block";
 
   } finally {
 
     loading.style.display = "none";
+
     setButtonsDisabled(false);
 
   }
 }
 
 
-/* =========================
+/* =========================================================
    CLEAR EVERYTHING
-========================= */
+========================================================= */
 
 function clearAll() {
 
   document.getElementById("code").value = "";
 
-  document.getElementById("result").textContent =
+  document.getElementById(
+    "result"
+  ).textContent =
     "Your AI result will appear here.";
 
-  document.getElementById("result").style.display = "none";
+  document.getElementById(
+    "result"
+  ).style.display = "none";
 
-  document.getElementById("runResult").textContent = "";
+  document.getElementById(
+    "runResult"
+  ).textContent = "";
 
-  document.getElementById("runResult").style.display = "none";
+  document.getElementById(
+    "runResult"
+  ).style.display = "none";
 
-  document.getElementById("applyButton").style.display = "none";
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
 
-  document.getElementById("successMessage").style.display = "none";
+  document.getElementById(
+    "successMessage"
+  ).style.display = "none";
 
-  document.getElementById("loading").style.display = "none";
+  document.getElementById(
+    "loading"
+  ).style.display = "none";
 
   latestFixedCode = "";
 }
 
 
-/* =========================
+/* =========================================================
    BUTTON CONTROL
-========================= */
+========================================================= */
 
 function setButtonsDisabled(disabled) {
 
-  document.getElementById("reviewButton").disabled = disabled;
+  document.getElementById(
+    "reviewButton"
+  ).disabled = disabled;
 
-  document.getElementById("fixButton").disabled = disabled;
+  document.getElementById(
+    "fixButton"
+  ).disabled = disabled;
 
-  document.getElementById("applyButton").disabled = disabled;
+  document.getElementById(
+    "applyButton"
+  ).disabled = disabled;
 
-  document.getElementById("runButton").disabled = disabled;
+  document.getElementById(
+    "runButton"
+  ).disabled = disabled;
 
-  document.getElementById("clearButton").disabled = disabled;
+  document.getElementById(
+    "clearButton"
+  ).disabled = disabled;
 
 }
 
