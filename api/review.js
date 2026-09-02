@@ -1,0 +1,133 @@
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
+  }
+
+  try {
+    const { code, language } = req.body || {};
+
+    // Basic protection against unnecessarily large requests
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({
+        error: "Please provide valid code."
+      });
+    }
+
+    if (code.length > 12000) {
+      return res.status(400).json({
+        error: "Code is too long. Please keep it under 12,000 characters."
+      });
+    }
+
+    const allowedLanguages = [
+      "Python",
+      "JavaScript",
+      "Java",
+      "C#",
+      "C++",
+      "SQL"
+    ];
+
+    if (!allowedLanguages.includes(language)) {
+      return res.status(400).json({
+        error: "Unsupported programming language."
+      });
+    }
+
+    const prompt = `
+You are an expert software code reviewer.
+
+Programming language: ${language}
+
+Review the following code:
+
+--- CODE START ---
+${code}
+--- CODE END ---
+
+Identify:
+
+1. Bugs
+2. Security issues
+3. Code quality problems
+4. Performance issues
+5. Recommended improvements
+
+For each genuine issue provide:
+
+Severity: Critical / High / Medium / Low
+Problem:
+Explanation:
+Suggested Fix:
+
+Do not invent problems.
+
+Finally provide:
+
+Final Code Quality Score: X/100
+`;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "Gemini API key is not configured."
+      });
+    }
+
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
+        encodeURIComponent(apiKey),
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error:
+          data?.error?.message ||
+          "Gemini request failed."
+      });
+    }
+
+    const result =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!result) {
+      return res.status(500).json({
+        error: "Gemini returned an empty response."
+      });
+    }
+
+    return res.status(200).json({
+      result
+    });
+
+  } catch (error) {
+
+    return res.status(500).json({
+      error: "Something went wrong while reviewing the code."
+    });
+  }
+}
