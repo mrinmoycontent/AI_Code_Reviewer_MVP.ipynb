@@ -112,6 +112,11 @@
       display: none;
     }
 
+    .clear {
+      background: #64748b;
+      color: white;
+    }
+
     button:hover {
       opacity: 0.9;
     }
@@ -225,6 +230,13 @@ print(calculate_discount(price, discount))</textarea>
         class="apply"
         onclick="applyFix()">
         ✅ Apply Fix
+      </button>
+
+      <button
+        id="clearButton"
+        class="clear"
+        onclick="clearAll()">
+        🗑️ Clear
       </button>
 
     </div>
@@ -444,6 +456,29 @@ function applyFix() {
 
 
 /* =========================
+   CLEAR EVERYTHING
+========================= */
+
+function clearAll() {
+
+  document.getElementById("code").value = "";
+
+  document.getElementById("result").textContent =
+    "Your AI result will appear here.";
+
+  document.getElementById("result").style.display = "none";
+
+  document.getElementById("applyButton").style.display = "none";
+
+  document.getElementById("successMessage").style.display = "none";
+
+  document.getElementById("loading").style.display = "none";
+
+  latestFixedCode = "";
+}
+
+
+/* =========================
    BUTTON CONTROL
 ========================= */
 
@@ -454,6 +489,8 @@ function setButtonsDisabled(disabled) {
   document.getElementById("fixButton").disabled = disabled;
 
   document.getElementById("applyButton").disabled = disabled;
+
+  document.getElementById("clearButton").disabled = disabled;
 
 }
 
