@@ -8,123 +8,151 @@ export default async function handler(req, res) {
   try {
     const { code, language } = req.body || {};
 
-    // Validate code
     if (!code || typeof code !== "string") {
       return res.status(400).json({
         error: "Please provide code to review."
       });
     }
 
-    // Validate language
     if (!language || typeof language !== "string") {
       return res.status(400).json({
         error: "Please select a programming language."
       });
     }
 
-    // Get Gemini API key from Vercel Environment Variables
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "AI service is not configured."
+        error: "GEMINI_API_KEY is not configured."
       });
     }
 
-    // Send request to Gemini
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text:
-                    `You are an expert software code reviewer.
+    const prompt = `
+You are an expert software code reviewer.
 
 Review the following ${language} code.
 
-Identify:
+Provide a professional structured review containing:
 
 1. Bugs
-2. Security issues
-3. Code quality problems
-4. Performance issues
-5. Recommended improvements
+2. Security Issues
+3. Code Quality Problems
+4. Performance Issues
+5. Recommended Improvements
+6. Improved Code
 
-Give a clear and structured review.
+For the improved code, use this exact format:
 
-At the end, provide:
+FIXED CODE:
+\`\`\`${language}
+[corrected code]
+\`\`\`
+
+Finally provide:
 
 Final Code Quality Score: X/100
 
-Be specific and explain each important issue.
+Be accurate. Do not invent problems that are not present in the code.
 
-Code:
+CODE TO REVIEW:
 
 \`\`\`${language}
 ${code}
-\`\`\``
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
+\`\`\`
+`;
 
-    const data = await response.json();
+    const maxAttempts = 3;
 
-    // Handle Gemini errors
-    if (!response.ok) {
+    let lastError = null;
 
-      console.error("Gemini API error:", data);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 
-      if (
-        response.status === 429 ||
-        response.status === 500 ||
-        response.status === 503
-      ) {
-        return res.status(503).json({
-          error:
-            "⚠️ AI service is temporarily busy. Please try again in a moment."
-        });
-      }
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+        {
+          method: "POST",
 
-      return res.status(response.status).json({
-        error:
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+
+        const result =
+          data?.candidates?.[0]?.content?.parts
+            ?.map(part => part.text || "")
+            .join("")
+            .trim();
+
+        if (result) {
+          return res.status(200).json({
+            success: true,
+            result: result
+          });
+        }
+
+        lastError = "Gemini returned an empty response.";
+
+      } else {
+
+        lastError =
           data?.error?.message ||
-          "Unable to get an AI review."
-      });
+          "Gemini API request failed.";
+
+        console.error(
+          `Gemini attempt ${attempt}:`,
+          data
+        );
+
+        /*
+          Retry temporary server/capacity errors.
+        */
+        if (
+          response.status !== 429 &&
+          response.status !== 500 &&
+          response.status !== 502 &&
+          response.status !== 503 &&
+          response.status !== 504
+        ) {
+          return res.status(response.status).json({
+            error: lastError
+          });
+        }
+      }
+
+      /*
+        Wait before retrying.
+        1 second, then 2 seconds.
+      */
+      if (attempt < maxAttempts) {
+        await new Promise(resolve =>
+          setTimeout(resolve, attempt * 1000)
+        );
+      }
     }
 
-    // Extract Gemini response
-    const result =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
-
-    if (!result) {
-      return res.status(502).json({
-        error:
-          "⚠️ AI did not return a review. Please try again."
-      });
-    }
-
-    // Successful response
-    return res.status(200).json({
-      success: true,
-      result: result
+    return res.status(503).json({
+      error:
+        "⚠️ Gemini is temporarily unavailable. Please try again shortly."
     });
 
   } catch (error) {
