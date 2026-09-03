@@ -50,18 +50,18 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} developer.
+You are an expert ${language} software developer.
 
-Review and fix the following ${language} code.
+Review the following ${language} code.
 
-Preserve the original purpose of the program.
-Fix genuine bugs.
+Find genuine bugs and fix them.
+Preserve the original purpose.
 Do not unnecessarily rewrite working code.
 
 Return exactly:
 
 SUMMARY:
-Explain the problem and how you fixed it.
+Explain the problem and how it was fixed.
 
 FIXED CODE:
 Provide the complete corrected code inside a markdown code block.
@@ -75,79 +75,64 @@ ${code}
 \`\`\`
 `;
 
-    const models = [
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash"
-    ];
-
-    let lastError = "Gemini service unavailable.";
-
-    for (const model of models) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey
-            },
-            body: JSON.stringify({
-              contents: [
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
                 {
-                  parts: [
-                    {
-                      text: prompt
-                    }
-                  ]
+                  text: prompt
                 }
               ]
-            })
+            }
+          ],
+          generationConfig: {
+            maxOutputTokens: 4096,
+            thinkingConfig: {
+              thinkingLevel: "low"
+            }
           }
-        );
-
-        const data = await response.json();
-
-        if (response.ok) {
-          const result =
-            data?.candidates?.[0]?.content?.parts
-              ?.map(part => part.text || "")
-              .join("")
-              .trim();
-
-          if (result) {
-            return res.status(200).json({
-              success: true,
-              result
-            });
-          }
-
-          lastError = "Gemini returned an empty response.";
-          continue;
-        }
-
-        lastError =
-          data?.error?.message ||
-          `HTTP ${response.status}`;
-
-        console.error(`${model} error:`, lastError);
-
-      } catch (error) {
-        lastError =
-          error?.message ||
-          "Request failed.";
-
-        console.error(`${model} request error:`, lastError);
+        })
       }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Gemini API error:", data);
+
+      return res.status(response.status).json({
+        error:
+          "Gemini API error: " +
+          (data?.error?.message || `HTTP ${response.status}`)
+      });
     }
 
-    return res.status(503).json({
-      error:
-        "AI Fix service is temporarily unavailable. " +
-        "Please try again shortly.\n\n" +
-        "Details: " +
-        lastError
+    const result =
+      data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
+
+    if (!result) {
+      console.error("Gemini returned empty response:", data);
+
+      return res.status(502).json({
+        error: "Gemini returned an empty response."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      result
     });
 
   } catch (error) {
@@ -155,7 +140,7 @@ ${code}
 
     return res.status(500).json({
       error:
-        "Server error: " +
+        "AI Fix failed: " +
         (error?.message || "Unknown error")
     });
   }
