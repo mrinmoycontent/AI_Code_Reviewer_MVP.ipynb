@@ -1,147 +1,452 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed"
-    });
-  }
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  try {
-    const { code, language } = req.body || {};
+  <title>AI Code Reviewer</title>
 
-    if (!code || typeof code !== "string") {
-      return res.status(400).json({
-        error: "Please provide valid code."
-      });
+  <style>
+    * {
+      box-sizing: border-box;
     }
 
-    if (!language || typeof language !== "string") {
-      return res.status(400).json({
-        error: "Please select a programming language."
-      });
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f5f7fb;
+      color: #172033;
     }
 
-    const allowedLanguages = [
-      "Python",
-      "JavaScript",
-      "Java",
-      "C#",
-      "C++",
-      "SQL"
-    ];
-
-    if (!allowedLanguages.includes(language)) {
-      return res.status(400).json({
-        error: "Unsupported programming language."
-      });
+    .header {
+      background: #111827;
+      color: white;
+      padding: 24px;
+      text-align: center;
     }
 
-    if (code.length > 12000) {
-      return res.status(400).json({
-        error: "Code is too long."
-      });
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is missing in Vercel."
-      });
+    .header p {
+      margin: 0;
+      color: #cbd5e1;
     }
 
-    const prompt = `
-You are an expert ${language} developer.
+    .container {
+      width: min(1100px, 94%);
+      margin: 30px auto;
+    }
 
-Review and fix the following ${language} code.
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 22px;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+    }
 
-Preserve the original purpose.
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
 
-Identify genuine bugs and correct them.
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 15px;
+      outline: none;
+    }
 
-Return exactly:
+    select:focus,
+    textarea:focus {
+      border-color: #6366f1;
+    }
 
-SUMMARY:
-Explain the problem and fix.
+    select {
+      margin-bottom: 20px;
+      background: white;
+    }
 
-FIXED CODE:
-Provide the complete corrected code in a markdown code block.
+    textarea {
+      min-height: 300px;
+      resize: vertical;
+      font-family: Consolas, Monaco, monospace;
+      line-height: 1.5;
+    }
 
-CHANGES:
-List the important changes.
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
 
-Code:
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
 
-\`\`\`${language}
-${code}
-\`\`\`
-`;
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-      {
+    .review {
+      background: #2563eb;
+      color: white;
+    }
+
+    .fix {
+      background: #16a34a;
+      color: white;
+    }
+
+    .run {
+      background: #7c3aed;
+      color: white;
+    }
+
+    .clear {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    #status {
+      margin-top: 18px;
+      font-weight: 600;
+      white-space: pre-wrap;
+    }
+
+    #result {
+      margin-top: 20px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      min-height: 120px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      font-family: Consolas, Monaco, monospace;
+      line-height: 1.55;
+    }
+
+    .result-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 25px;
+      color: #64748b;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="header">
+    <h1>AI Code Reviewer</h1>
+    <p>Review, fix and validate your code with AI</p>
+  </header>
+
+  <main class="container">
+
+    <section class="card">
+
+      <label for="language">Programming Language</label>
+
+      <select id="language">
+        <option value="Python">Python</option>
+        <option value="JavaScript">JavaScript</option>
+        <option value="Java">Java</option>
+        <option value="C#">C#</option>
+        <option value="C++">C++</option>
+        <option value="SQL">SQL</option>
+      </select>
+
+      <label for="code">Your Code</label>
+
+      <textarea
+        id="code"
+        placeholder="Paste your code here..."
+      ></textarea>
+
+      <div class="buttons">
+
+        <button
+          id="reviewBtn"
+          class="review"
+          onclick="reviewCode()"
+        >
+          Review Code
+        </button>
+
+        <button
+          id="fixBtn"
+          class="fix"
+          onclick="fixCode()"
+        >
+          Generate Fix
+        </button>
+
+        <button
+          id="runBtn"
+          class="run"
+          onclick="testCode()"
+        >
+          Test Code
+        </button>
+
+        <button
+          class="clear"
+          onclick="clearAll()"
+        >
+          Clear
+        </button>
+
+      </div>
+
+      <div id="status"></div>
+
+    </section>
+
+    <section class="card">
+
+      <div class="result-title">
+        Result
+      </div>
+
+      <div id="result">
+        Your AI result will appear here.
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    AI Code Reviewer MVP
+  </footer>
+
+
+  <script>
+
+    const codeInput = document.getElementById("code");
+    const languageInput = document.getElementById("language");
+
+    const reviewBtn = document.getElementById("reviewBtn");
+    const fixBtn = document.getElementById("fixBtn");
+    const runBtn = document.getElementById("runBtn");
+
+    const statusBox = document.getElementById("status");
+    const resultBox = document.getElementById("result");
+
+
+    function setLoading(loading, message = "") {
+
+      reviewBtn.disabled = loading;
+      fixBtn.disabled = loading;
+      runBtn.disabled = loading;
+
+      statusBox.textContent = message;
+    }
+
+
+    function getInput() {
+
+      const code = codeInput.value.trim();
+      const language = languageInput.value;
+
+      if (!code) {
+        throw new Error("Please enter some code first.");
+      }
+
+      return {
+        code,
+        language
+      };
+    }
+
+
+    async function callAPI(endpoint) {
+
+      const input = getInput();
+
+      const response = await fetch(endpoint, {
+
         method: "POST",
 
         headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
+          "Content-Type": "application/json"
         },
 
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt
-                }
-              ]
-            }
-          ]
-        })
+        body: JSON.stringify(input)
+
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          `Server returned an invalid response (${response.status}).`
+        );
       }
-    );
 
-    const data = await response.json();
+      if (!response.ok) {
 
-    if (!response.ok) {
-      console.error("Gemini API response:", data);
+        throw new Error(
+          data?.error ||
+          `Request failed with HTTP ${response.status}.`
+        );
 
-      return res.status(500).json({
-        error:
-          "Gemini API error: " +
-          (
-            data?.error?.message ||
-            `HTTP ${response.status}`
-          )
-      });
+      }
+
+      return data;
     }
 
-    const result =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
 
-    if (!result) {
-      console.error("Empty Gemini response:", data);
+    async function reviewCode() {
 
-      return res.status(500).json({
-        error: "Gemini returned an empty response."
-      });
+      try {
+
+        setLoading(true, "Reviewing your code...");
+
+        resultBox.textContent = "";
+
+        const data = await callAPI("/api/review");
+
+        resultBox.textContent =
+          data.result ||
+          data.message ||
+          "No result returned.";
+
+        setLoading(false, "Review completed.");
+
+      } catch (error) {
+
+        setLoading(false);
+
+        resultBox.textContent =
+          "❌ " + error.message;
+
+        statusBox.textContent =
+          "Review failed.";
+
+      }
     }
 
-    return res.status(200).json({
-      success: true,
-      result: result
+
+    async function fixCode() {
+
+      try {
+
+        setLoading(true, "Generating fix...");
+
+        resultBox.textContent = "";
+
+        const data = await callAPI("/api/fix");
+
+        resultBox.textContent =
+          data.result ||
+          data.message ||
+          "No result returned.";
+
+        setLoading(false, "Fix generated successfully.");
+
+      } catch (error) {
+
+        setLoading(false);
+
+        resultBox.textContent =
+          "❌ " + error.message;
+
+        statusBox.textContent =
+          "AI fix failed.";
+
+      }
+    }
+
+
+    async function testCode() {
+
+      try {
+
+        setLoading(true, "Testing code...");
+
+        resultBox.textContent = "";
+
+        const data = await callAPI("/api/run");
+
+        resultBox.textContent =
+          data.result ||
+          data.message ||
+          "Code received successfully.";
+
+        setLoading(false, "Test completed.");
+
+      } catch (error) {
+
+        setLoading(false);
+
+        resultBox.textContent =
+          "❌ " + error.message;
+
+        statusBox.textContent =
+          "Test failed.";
+
+      }
+    }
+
+
+    function clearAll() {
+
+      codeInput.value = "";
+
+      resultBox.textContent =
+        "Your AI result will appear here.";
+
+      statusBox.textContent = "";
+
+    }
+
+
+    /*
+     * Allow Ctrl/Cmd + Enter to generate a fix.
+     */
+    codeInput.addEventListener("keydown", function(event) {
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "Enter"
+      ) {
+
+        event.preventDefault();
+
+        fixCode();
+
+      }
+
     });
 
-  } catch (error) {
+  </script>
 
-    console.error("Fix API error:", error);
-
-    return res.status(500).json({
-      error:
-        "Server error: " +
-        (error?.message || "Unknown error")
-    });
-  }
-}
+</body>
+</html>
+```
