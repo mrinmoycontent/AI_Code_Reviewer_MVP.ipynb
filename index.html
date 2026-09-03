@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -243,7 +242,6 @@
     AI Code Reviewer MVP
   </footer>
 
-
   <script>
 
     const codeInput = document.getElementById("code");
@@ -256,19 +254,14 @@
     const statusBox = document.getElementById("status");
     const resultBox = document.getElementById("result");
 
-
     function setLoading(loading, message = "") {
-
       reviewBtn.disabled = loading;
       fixBtn.disabled = loading;
       runBtn.disabled = loading;
-
       statusBox.textContent = message;
     }
 
-
     function getInput() {
-
       const code = codeInput.value.trim();
       const language = languageInput.value;
 
@@ -282,21 +275,16 @@
       };
     }
 
-
     async function callAPI(endpoint) {
 
       const input = getInput();
 
       const response = await fetch(endpoint, {
-
         method: "POST",
-
         headers: {
           "Content-Type": "application/json"
         },
-
         body: JSON.stringify(input)
-
       });
 
       let data;
@@ -310,17 +298,14 @@
       }
 
       if (!response.ok) {
-
         throw new Error(
           data?.error ||
           `Request failed with HTTP ${response.status}.`
         );
-
       }
 
       return data;
     }
-
 
     async function reviewCode() {
 
@@ -348,10 +333,8 @@
 
         statusBox.textContent =
           "Review failed.";
-
       }
     }
-
 
     async function fixCode() {
 
@@ -379,10 +362,8 @@
 
         statusBox.textContent =
           "AI fix failed.";
-
       }
     }
-
 
     async function testCode() {
 
@@ -410,10 +391,8 @@
 
         statusBox.textContent =
           "Test failed.";
-
       }
     }
-
 
     function clearAll() {
 
@@ -423,13 +402,8 @@
         "Your AI result will appear here.";
 
       statusBox.textContent = "";
-
     }
 
-
-    /*
-     * Allow Ctrl/Cmd + Enter to generate a fix.
-     */
     codeInput.addEventListener("keydown", function(event) {
 
       if (
@@ -440,7 +414,6 @@
         event.preventDefault();
 
         fixCode();
-
       }
 
     });
@@ -449,4 +422,3 @@
 
 </body>
 </html>
-```
