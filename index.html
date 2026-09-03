@@ -205,7 +205,7 @@
 
   <div class="header">
     <h1>🤖 AI Code Reviewer & Auto-Fixer</h1>
-    <p>Review, analyze and improve your code with AI.</p>
+    <p>Review, analyze, fix and test your code with AI.</p>
   </div>
 
   <div class="card">
@@ -252,7 +252,7 @@
         id="runButton"
         class="run"
         onclick="runCode()">
-        🧪 Validate Code
+        ▶️ Run / Test
       </button>
 
       <button
@@ -274,6 +274,7 @@
 
   </div>
 
+
   <div class="card">
 
     <h2>📋 AI Review</h2>
@@ -284,25 +285,27 @@
 
   </div>
 
+
   <div class="card">
 
-    <h2>🧪 Validation Result</h2>
+    <h2>▶️ Test Result</h2>
 
     <div class="warning">
-      ⚠️ Safe validation mode is enabled. User code is not executed
-      directly on the server. The validation endpoint confirms that
-      the selected language and code were received successfully.
+      ⚠️ Safe test mode is enabled. User code is not executed directly
+      on the server.
     </div>
 
     <div id="runResult"></div>
 
   </div>
 
+
   <div class="footer">
     AI Code Reviewer & Auto-Fixer • Portfolio Project
   </div>
 
 </div>
+
 
 <script>
 
@@ -330,11 +333,9 @@ async function reviewCode() {
     "🔍 AI is reviewing your code...";
 
   loading.style.display = "block";
-
   result.style.display = "none";
 
-  document.getElementById("applyButton").style.display =
-    "none";
+  document.getElementById("applyButton").style.display = "none";
 
   setButtonsDisabled(true);
 
@@ -364,7 +365,6 @@ async function reviewCode() {
     }
 
     result.textContent = data.result;
-
     result.style.display = "block";
 
   } catch (error) {
@@ -377,7 +377,6 @@ async function reviewCode() {
   } finally {
 
     loading.style.display = "none";
-
     setButtonsDisabled(false);
 
   }
@@ -409,11 +408,12 @@ async function generateFix() {
   loading.style.display = "block";
 
   result.style.display = "none";
-
   success.style.display = "none";
 
   document.getElementById("applyButton").style.display =
     "none";
+
+  latestFixedCode = "";
 
   setButtonsDisabled(true);
 
@@ -443,11 +443,10 @@ async function generateFix() {
     }
 
     result.textContent = data.result;
-
     result.style.display = "block";
 
     latestFixedCode =
-      extractFixedCode(data.result);
+      extractFixedCode(data.result, language);
 
     if (latestFixedCode) {
 
@@ -467,7 +466,6 @@ async function generateFix() {
   } finally {
 
     loading.style.display = "none";
-
     setButtonsDisabled(false);
 
   }
@@ -476,16 +474,65 @@ async function generateFix() {
 
 /* =========================================================
    EXTRACT FIXED CODE
+   Supports Python, JavaScript, Java, C#, C++, SQL
 ========================================================= */
 
-function extractFixedCode(text) {
+function extractFixedCode(text, language) {
 
-  const match = text.match(
-    /FIXED CODE:\s*```(?:python|javascript|java|csharp|cpp|sql)?\s*([\s\S]*?)```/i
+  if (!text || typeof text !== "string") {
+    return "";
+  }
+
+  /*
+    First try to find the FIXED CODE section.
+  */
+
+  const fixedSectionMatch = text.match(
+    /FIXED\s+CODE\s*:\s*([\s\S]*)/i
   );
 
-  if (match) {
-    return match[1].trim();
+  if (!fixedSectionMatch) {
+    return "";
+  }
+
+  const fixedSection = fixedSectionMatch[1];
+
+  /*
+    Accept different language labels.
+
+    Examples:
+    ```python
+    ```Python
+    ```javascript
+    ```JavaScript
+    ```java
+    ```C#
+    ```csharp
+    ```C++
+    ```cpp
+    ```SQL
+  */
+
+  const codeBlockMatch = fixedSection.match(
+    /```(?:python|Python|javascript|JavaScript|js|JS|java|Java|csharp|Csharp|C#|cpp|Cpp|C\+\+|sql|SQL)?\s*\n?([\s\S]*?)```/i
+  );
+
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
+  }
+
+  /*
+    Fallback:
+    If Gemini gives FIXED CODE without a markdown
+    language label, still extract the code.
+  */
+
+  const genericBlockMatch = fixedSection.match(
+    /```\s*\n?([\s\S]*?)```/i
+  );
+
+  if (genericBlockMatch) {
+    return genericBlockMatch[1].trim();
   }
 
   return "";
@@ -530,7 +577,7 @@ function applyFix() {
 
 
 /* =========================================================
-   VALIDATE CODE
+   RUN / TEST CODE
 ========================================================= */
 
 async function runCode() {
@@ -554,10 +601,9 @@ async function runCode() {
     document.getElementById("runResult");
 
   loading.textContent =
-    "🧪 Validating your code...";
+    "▶️ Testing your code...";
 
   loading.style.display = "block";
-
   runResult.style.display = "none";
 
   setButtonsDisabled(true);
@@ -584,13 +630,13 @@ async function runCode() {
     if (!response.ok) {
 
       throw new Error(
-        data.error || "Code validation failed."
+        data.error || "Code test failed."
       );
 
     }
 
     runResult.textContent =
-      "✅ Validation successful.\n\n" +
+      "✅ Test request successful.\n\n" +
       "Language: " + data.language + "\n" +
       "Status: " + data.status + "\n\n" +
       data.message;
@@ -600,7 +646,7 @@ async function runCode() {
   } catch (error) {
 
     runResult.textContent =
-      "❌ Validation failed.\n\n" +
+      "❌ Test failed.\n\n" +
       error.message;
 
     runResult.style.display = "block";
@@ -608,7 +654,6 @@ async function runCode() {
   } finally {
 
     loading.style.display = "none";
-
     setButtonsDisabled(false);
 
   }
