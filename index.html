@@ -205,7 +205,7 @@
 
   <div class="header">
     <h1>🤖 AI Code Reviewer & Auto-Fixer</h1>
-    <p>Review, analyze, fix and test your code with AI.</p>
+    <p>Review, analyze and improve your code with AI.</p>
   </div>
 
   <div class="card">
@@ -252,7 +252,7 @@
         id="runButton"
         class="run"
         onclick="runCode()">
-        ▶️ Run / Test
+        🧪 Validate Code
       </button>
 
       <button
@@ -274,7 +274,6 @@
 
   </div>
 
-
   <div class="card">
 
     <h2>📋 AI Review</h2>
@@ -285,27 +284,25 @@
 
   </div>
 
-
   <div class="card">
 
-    <h2>▶️ Test Result</h2>
+    <h2>🧪 Validation Result</h2>
 
     <div class="warning">
-      ⚠️ Safe test mode is enabled. User code is not executed directly
-      on the server.
+      ⚠️ Safe validation mode is enabled. User code is not executed
+      directly on the server. The validation endpoint confirms that
+      the selected language and code were received successfully.
     </div>
 
     <div id="runResult"></div>
 
   </div>
 
-
   <div class="footer">
     AI Code Reviewer & Auto-Fixer • Portfolio Project
   </div>
 
 </div>
-
 
 <script>
 
@@ -533,7 +530,7 @@ function applyFix() {
 
 
 /* =========================================================
-   RUN / TEST CODE
+   VALIDATE CODE
 ========================================================= */
 
 async function runCode() {
@@ -557,7 +554,7 @@ async function runCode() {
     document.getElementById("runResult");
 
   loading.textContent =
-    "▶️ Testing your code...";
+    "🧪 Validating your code...";
 
   loading.style.display = "block";
 
@@ -587,13 +584,13 @@ async function runCode() {
     if (!response.ok) {
 
       throw new Error(
-        data.error || "Code test failed."
+        data.error || "Code validation failed."
       );
 
     }
 
     runResult.textContent =
-      "✅ Test request successful.\n\n" +
+      "✅ Validation successful.\n\n" +
       "Language: " + data.language + "\n" +
       "Status: " + data.status + "\n\n" +
       data.message;
@@ -603,7 +600,7 @@ async function runCode() {
   } catch (error) {
 
     runResult.textContent =
-      "❌ Test failed.\n\n" +
+      "❌ Validation failed.\n\n" +
       error.message;
 
     runResult.style.display = "block";
