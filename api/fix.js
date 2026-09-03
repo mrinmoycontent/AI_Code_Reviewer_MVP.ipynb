@@ -8,21 +8,18 @@ export default async function handler(req, res) {
   try {
     const { code, language } = req.body || {};
 
-    // Validate code
     if (!code || typeof code !== "string") {
       return res.status(400).json({
         error: "Please provide valid code."
       });
     }
 
-    // Prevent extremely large requests
     if (code.length > 12000) {
       return res.status(400).json({
         error: "Code is too long. Please keep it under 12,000 characters."
       });
     }
 
-    // Supported languages
     const allowedLanguages = [
       "Python",
       "JavaScript",
@@ -38,34 +35,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Get Gemini API key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "Gemini API key is not configured."
+        error: "GEMINI_API_KEY is not configured in Vercel."
       });
     }
 
-    // Prompt
     const prompt = `
 You are an expert ${language} software developer and debugging assistant.
 
 Analyze the following ${language} code.
 
-Your job is to:
+Fix genuine bugs while preserving the original purpose of the program.
 
-1. Identify genuine bugs.
-2. Explain what is wrong.
-3. Correct the code.
-4. Preserve the original purpose and functionality.
-5. Improve obvious reliability and code-quality problems.
-6. Do not make unnecessary changes.
-
-Return the response using exactly this structure:
+Return exactly:
 
 SUMMARY:
-Briefly explain the problem and the fix.
+Explain the problem and what you fixed.
 
 FIXED CODE:
 Provide the complete corrected code inside a markdown code block.
@@ -75,85 +63,153 @@ CHANGES:
 2. Explain the second important change.
 3. Explain any other important change.
 
-Make sure the corrected code is complete and directly usable.
+Do not add unnecessary complexity.
 
-CODE TO FIX:
+CODE:
 
 \`\`\`${language}
 ${code}
 \`\`\`
 `;
 
-    // Gemini request
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-      {
-        method: "POST",
+    /*
+      Try several current Gemini Flash models.
+      If one is temporarily overloaded, automatically
+      try the next model.
+    */
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
+    const models = [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite"
+    ];
 
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
+    let lastError = "";
+
+    for (const model of models) {
+
+      try {
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: prompt
+                  role: "user",
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
                 }
               ]
-            }
-          ]
-        })
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        /*
+          Successful Gemini response
+        */
+
+        if (response.ok) {
+
+          const result =
+            data?.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || "")
+              .join("")
+              .trim();
+
+          if (result) {
+
+            return res.status(200).json({
+              success: true,
+              model: model,
+              result: result
+            });
+
+          }
+
+          lastError =
+            `${model}: Gemini returned an empty response.`;
+
+          continue;
+        }
+
+        /*
+          Temporary Gemini errors:
+          429 = rate limit
+          500 = server error
+          502 = bad gateway
+          503 = overloaded/unavailable
+          504 = timeout
+        */
+
+        if (
+          response.status === 429 ||
+          response.status === 500 ||
+          response.status === 502 ||
+          response.status === 503 ||
+          response.status === 504
+        ) {
+
+          lastError =
+            `${model}: ${
+              data?.error?.message ||
+              `HTTP ${response.status}`
+            }`;
+
+          console.log(
+            `Gemini model ${model} unavailable. Trying next model.`
+          );
+
+          continue;
+        }
+
+        /*
+          Permanent/API configuration error.
+        */
+
+        return res.status(response.status).json({
+          error:
+            `Gemini API error (${model}): ` +
+            (
+              data?.error?.message ||
+              `HTTP ${response.status}`
+            )
+        });
+
+      } catch (error) {
+
+        lastError =
+          `${model}: ${error?.message || "Request failed."}`;
+
+        console.log(
+          `Gemini model ${model} request failed. Trying next model.`
+        );
+
+        continue;
       }
-    );
-
-    // Read Gemini response
-    const data = await response.json();
-
-    // IMPORTANT:
-    // Return the actual Gemini error so we can diagnose it.
-    if (!response.ok) {
-
-      console.error("Gemini API error:", data);
-
-      return res.status(response.status).json({
-        error:
-          "Gemini API error: " +
-          (
-            data?.error?.message ||
-            "Unknown Gemini API error."
-          )
-      });
     }
 
-    // Extract generated response
-    const result =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
+    /*
+      Every fallback model failed.
+    */
 
-    // Empty response
-    if (!result) {
-
-      console.error(
-        "Gemini returned no usable content:",
-        data
-      );
-
-      return res.status(502).json({
-        error:
-          "Gemini API returned an empty response."
-      });
-    }
-
-    // Successful response
-    return res.status(200).json({
-      success: true,
-      result: result
+    return res.status(503).json({
+      error:
+        "⚠️ Gemini is temporarily unavailable across the available Flash models. " +
+        "Please try again shortly."
     });
 
   } catch (error) {
@@ -165,8 +221,8 @@ ${code}
 
     return res.status(500).json({
       error:
-        "Fix API error: " +
-        (error?.message || "Unknown server error.")
+        "Server error: " +
+        (error?.message || "Unknown error.")
     });
   }
 }
