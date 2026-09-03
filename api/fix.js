@@ -54,14 +54,14 @@ You are an expert ${language} developer.
 
 Review and fix the following ${language} code.
 
-Preserve the original purpose.
+Preserve the original purpose of the program.
 Fix genuine bugs.
 Do not unnecessarily rewrite working code.
 
 Return exactly:
 
 SUMMARY:
-Explain the problem and fix.
+Explain the problem and how you fixed it.
 
 FIXED CODE:
 Provide the complete corrected code inside a markdown code block.
@@ -89,12 +89,10 @@ ${code}
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: "POST",
-
             headers: {
               "Content-Type": "application/json",
               "x-goog-api-key": apiKey
             },
-
             body: JSON.stringify({
               contents: [
                 {
@@ -121,7 +119,7 @@ ${code}
           if (result) {
             return res.status(200).json({
               success: true,
-              result: result
+              result
             });
           }
 
@@ -146,7 +144,7 @@ ${code}
 
     return res.status(503).json({
       error:
-        "⚠️ AI Fix service is temporarily unavailable. " +
+        "AI Fix service is temporarily unavailable. " +
         "Please try again shortly.\n\n" +
         "Details: " +
         lastError
