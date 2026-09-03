@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     if (code.length > 12000) {
       return res.status(400).json({
-        error: "Code is too long. Please keep it under 12,000 characters."
+        error: "Code is too long."
       });
     }
 
@@ -50,54 +50,50 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} software developer.
+You are an expert ${language} developer.
 
-Review the following ${language} code.
+Review and fix the following ${language} code.
 
-Find genuine bugs and fix them.
 Preserve the original purpose of the program.
-Do not unnecessarily rewrite working code.
+Only fix genuine bugs and improve obvious code quality issues.
 
 Return exactly:
 
 SUMMARY:
-Explain the problem and the solution.
+Explain the problem and how you fixed it.
 
 FIXED CODE:
-Provide the COMPLETE corrected code inside a markdown code block.
+Provide the complete corrected code inside a markdown code block.
 
 CHANGES:
 List the important changes.
 
 CODE:
-\`\`\`${language}
+\`\`\`
 ${code}
 \`\`\`
 `;
 
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey
         },
+
         body: JSON.stringify({
           contents: [
             {
-              role: "user",
               parts: [
                 {
                   text: prompt
                 }
               ]
             }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 4096
-          }
+          ]
         })
       }
     );
@@ -105,7 +101,7 @@ ${code}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API error:", data);
+      console.error("Gemini API response:", data);
 
       return res.status(response.status).json({
         error:
@@ -125,7 +121,7 @@ ${code}
 
     if (!result) {
       return res.status(502).json({
-        error: "Gemini returned an empty response. Please try again."
+        error: "Gemini returned an empty response."
       });
     }
 
@@ -140,7 +136,7 @@ ${code}
     return res.status(500).json({
       error:
         "Server error: " +
-        (error?.message || "Unknown error.")
+        (error?.message || "Unknown error")
     });
   }
 }
