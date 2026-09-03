@@ -50,18 +50,17 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} software developer.
+You are an expert ${language} developer.
 
-Review and fix the following ${language} code.
+Review the following ${language} code and fix genuine bugs.
 
 Preserve the original purpose of the program.
-Identify genuine bugs and correct them.
 Do not unnecessarily rewrite working code.
 
-Return exactly:
+Return:
 
 SUMMARY:
-Explain the problem and fix.
+Explain the bug and the fix.
 
 FIXED CODE:
 Provide the complete corrected code in a markdown code block.
@@ -69,135 +68,140 @@ Provide the complete corrected code in a markdown code block.
 CHANGES:
 List the important changes.
 
-CODE:
-\`\`\`
+Original code:
+
 ${code}
-\`\`\`
 `;
 
     /*
-     * Try the current Flash model first.
-     * If Google temporarily returns a capacity error,
-     * retry automatically before giving up.
+     * Try the newest stable Flash model first,
+     * then fall back to the previous stable Flash model.
      */
     const models = [
       "gemini-3.8-flash",
       "gemini-3.7-flash"
     ];
 
-    let lastError = "Gemini service unavailable.";
+    let lastError = "";
 
     for (const model of models) {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": apiKey
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        text: prompt
-                      }
-                    ]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  maxOutputTokens: 4096
+
+      try {
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
                 }
-              })
-            }
-          );
+              ],
 
-          const data = await response.json();
+              generationConfig: {
+                maxOutputTokens: 4096,
 
-          if (response.ok) {
-            const result =
-              data?.candidates?.[0]?.content?.parts
-                ?.map(part => part.text || "")
-                .join("")
-                .trim();
-
-            if (result) {
-              return res.status(200).json({
-                success: true,
-                result
-              });
-            }
-
-            lastError = "Gemini returned an empty response.";
-            break;
+                thinkingConfig: {
+                  thinkingLevel: "low"
+                }
+              }
+            })
           }
+        );
 
-          lastError =
-            data?.error?.message ||
-            `HTTP ${response.status}`;
+        const data = await response.json();
 
-          console.error(
-            `Gemini ${model}, attempt ${attempt}:`,
-            lastError
-          );
+        if (response.ok) {
 
-          /*
-           * Retry only temporary capacity/server errors.
-           */
-          const retryable =
-            response.status === 429 ||
-            response.status === 500 ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 504;
+          const result =
+            data?.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || "")
+              .join("")
+              .trim();
 
-          if (!retryable) {
-            return res.status(response.status).json({
-              error: "Gemini API error: " + lastError
+          if (result) {
+            return res.status(200).json({
+              success: true,
+              result: result
             });
           }
 
-        } catch (error) {
-          lastError =
-            error?.message ||
-            "Network request failed.";
+          lastError = "Gemini returned an empty response.";
 
-          console.error(
-            `Gemini ${model}, attempt ${attempt}:`,
-            lastError
-          );
+          continue;
         }
+
+        lastError =
+          data?.error?.message ||
+          `HTTP ${response.status}`;
+
+        console.error(
+          `Gemini ${model} failed:`,
+          lastError
+        );
 
         /*
-         * Wait before retrying.
+         * Try the next model for temporary
+         * capacity/server errors.
          */
-        if (attempt < 3) {
-          await new Promise(resolve =>
-            setTimeout(resolve, attempt * 2000)
-          );
+        if (
+          response.status === 429 ||
+          response.status === 500 ||
+          response.status === 502 ||
+          response.status === 503 ||
+          response.status === 504
+        ) {
+          continue;
         }
+
+        return res.status(response.status).json({
+          error: "Gemini API error: " + lastError
+        });
+
+      } catch (error) {
+
+        lastError =
+          error?.message ||
+          "Network request failed.";
+
+        console.error(
+          `Gemini ${model} error:`,
+          lastError
+        );
+
+        continue;
       }
     }
 
     return res.status(503).json({
       error:
-        "AI Fix service is temporarily unavailable. " +
-        "Gemini is currently busy. Please try again shortly.",
+        "AI Fix service is temporarily unavailable.",
       details: lastError
     });
 
   } catch (error) {
-    console.error("Fix API error:", error);
+
+    console.error(
+      "Fix API error:",
+      error
+    );
 
     return res.status(500).json({
       error:
-        "AI Fix failed: " +
-        (error?.message || "Unknown server error.")
+        "Server error: " +
+        (error?.message || "Unknown error")
     });
   }
 }
