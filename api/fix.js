@@ -35,32 +35,6 @@ export default async function handler(req, res) {
       });
     }
 
-    const prompt = `
-You are an expert ${language} software developer.
-
-Improve the following ${language} code:
-
---- CODE START ---
-${code}
---- CODE END ---
-
-Fix genuine bugs and improve code quality.
-
-Do not change the purpose of the program.
-Do not add unnecessary complexity.
-
-Return:
-
-SUMMARY:
-Explain the improvements.
-
-FIXED CODE:
-Provide the complete corrected code.
-
-CHANGES:
-List the important changes.
-`;
-
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -69,57 +43,182 @@ List the important changes.
       });
     }
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
-        encodeURIComponent(apiKey),
-      {
-        method: "POST",
+    const prompt = `
+You are an expert ${language} software developer and debugging assistant.
 
-        headers: {
-          "Content-Type": "application/json"
-        },
+Analyze the following ${language} code.
 
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
+Your job is to fix genuine bugs and improve code quality while preserving the original purpose.
+
+Return the response in exactly this structure:
+
+SUMMARY:
+Briefly explain what is wrong and what you fixed.
+
+FIXED CODE:
+Provide the complete corrected code inside a markdown code block.
+
+CHANGES:
+1. Explain the first important change.
+2. Explain the second important change.
+3. Explain any other important change.
+
+Do not add unnecessary complexity.
+Do not change the purpose of the program.
+Make the corrected code complete and directly usable.
+
+CODE TO FIX:
+
+\`\`\`${language}
+${code}
+\`\`\`
+`;
+
+    const maxAttempts = 3;
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+
+      const controller = new AbortController();
+
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 30000);
+
+      try {
+
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: prompt
+                  role: "user",
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
                 }
               ]
-            }
-          ]
-        })
+            }),
+
+            signal: controller.signal
+          }
+        );
+
+        clearTimeout(timeout);
+
+        const data = await response.json();
+
+        if (response.ok) {
+
+          const result =
+            data?.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || "")
+              .join("")
+              .trim();
+
+          if (result) {
+
+            return res.status(200).json({
+              success: true,
+              result: result
+            });
+
+          }
+
+          lastError = "Gemini returned an empty response.";
+
+        } else {
+
+          lastError =
+            data?.error?.message ||
+            "Gemini request failed.";
+
+          console.error(
+            `Gemini Fix attempt ${attempt}:`,
+            data
+          );
+
+          /*
+           * Retry temporary Gemini errors.
+           */
+          if (
+            response.status !== 429 &&
+            response.status !== 500 &&
+            response.status !== 502 &&
+            response.status !== 503 &&
+            response.status !== 504
+          ) {
+
+            return res.status(response.status).json({
+              error: lastError
+            });
+
+          }
+        }
+
+      } catch (error) {
+
+        clearTimeout(timeout);
+
+        if (error.name === "AbortError") {
+
+          lastError =
+            "Gemini request timed out.";
+
+          console.error(
+            `Gemini Fix attempt ${attempt} timed out.`
+          );
+
+        } else {
+
+          lastError = error.message;
+
+          console.error(
+            `Gemini Fix attempt ${attempt} failed:`,
+            error
+          );
+
+        }
       }
-    );
 
-    const data = await response.json();
+      /*
+       * Wait before retrying.
+       */
+      if (attempt < maxAttempts) {
 
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error:
-          data?.error?.message ||
-          "Gemini request failed."
-      });
+        await new Promise(resolve =>
+          setTimeout(resolve, attempt * 1500)
+        );
+
+      }
     }
 
-    const result =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!result) {
-      return res.status(500).json({
-        error: "Gemini returned an empty response."
-      });
-    }
-
-    return res.status(200).json({
-      result
+    return res.status(503).json({
+      error:
+        "⚠️ AI fix service is temporarily unavailable. Please try again shortly."
     });
 
   } catch (error) {
 
+    console.error(
+      "Fix API error:",
+      error
+    );
+
     return res.status(500).json({
-      error: "Something went wrong while generating the fix."
+      error:
+        "⚠️ Unable to connect to the AI fix service."
     });
   }
 }
