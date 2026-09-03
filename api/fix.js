@@ -20,27 +20,6 @@ export default async function handler(req, res) {
       });
     }
 
-    if (code.length > 12000) {
-      return res.status(400).json({
-        error: "Code is too long. Please keep it under 12,000 characters."
-      });
-    }
-
-    const allowedLanguages = [
-      "Python",
-      "JavaScript",
-      "Java",
-      "C#",
-      "C++",
-      "SQL"
-    ];
-
-    if (!allowedLanguages.includes(language)) {
-      return res.status(400).json({
-        error: "Unsupported programming language."
-      });
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -50,30 +29,24 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert software developer specializing in ${language}.
+You are an expert ${language} developer.
 
-Review the user's ${language} code below.
+Fix genuine bugs in this ${language} code.
 
-Your tasks:
-1. Find genuine bugs.
-2. Fix the bugs.
-3. Preserve the original purpose of the program.
-4. Improve reliability where appropriate.
-5. Do not unnecessarily rewrite working code.
+Keep the original purpose of the program.
 
-Return exactly this format:
+Return:
 
 SUMMARY:
-Briefly explain the problem and solution.
+Explain the bug and solution.
 
 FIXED CODE:
-Return the COMPLETE corrected code inside one markdown code block.
+Complete corrected code in a markdown code block.
 
 CHANGES:
-List the important changes made.
+List the changes.
 
-USER CODE:
-
+CODE:
 \`\`\`${language}
 ${code}
 \`\`\`
@@ -90,7 +63,6 @@ ${code}
         body: JSON.stringify({
           contents: [
             {
-              role: "user",
               parts: [
                 {
                   text: prompt
@@ -108,19 +80,23 @@ ${code}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini error:", data);
+      console.error("Gemini API error:", data);
 
       return res.status(response.status).json({
         error:
-          data?.error?.message ||
-          `Gemini API returned HTTP ${response.status}.`
+          "Gemini API error: " +
+          (
+            data?.error?.message ||
+            `HTTP ${response.status}`
+          )
       });
     }
 
-    const result = data?.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("")
-      .trim();
+    const result =
+      data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
 
     if (!result) {
       return res.status(500).json({
@@ -139,7 +115,7 @@ ${code}
     return res.status(500).json({
       error:
         "Server error: " +
-        (error?.message || "Unknown error.")
+        (error?.message || "Unknown error")
     });
   }
 }
