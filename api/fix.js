@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     if (code.length > 12000) {
       return res.status(400).json({
-        error: "Code is too long."
+        error: "Code is too long. Please keep it under 12,000 characters."
       });
     }
 
@@ -50,17 +50,23 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} developer.
+You are an expert ${language} developer and code reviewer.
 
-Review the following ${language} code and fix genuine bugs.
+Review the following ${language} code.
 
-Preserve the original purpose of the program.
-Do not unnecessarily rewrite working code.
+Your job is to:
+1. Find genuine bugs.
+2. Explain why they are bugs.
+3. Fix the bugs.
+4. Preserve the original purpose of the program.
+5. Do not invent errors.
+6. Do not make unnecessary changes.
+7. Return the complete corrected code.
 
-Return:
+Return exactly in this format:
 
 SUMMARY:
-Explain the bug and the fix.
+Explain the problem and the fix.
 
 FIXED CODE:
 Provide the complete corrected code in a markdown code block.
@@ -68,140 +74,154 @@ Provide the complete corrected code in a markdown code block.
 CHANGES:
 List the important changes.
 
-Original code:
+Original ${language} code:
 
 ${code}
 `;
 
     /*
-     * Try the newest stable Flash model first,
-     * then fall back to the previous stable Flash model.
+     * Use stable Gemini Flash models.
+     * If a temporary 429/5xx error occurs,
+     * retry the request and then try the second model.
      */
     const models = [
-      "gemini-3.8-flash",
-      "gemini-3.7-flash"
+      "gemini-3.7-flash",
+      "gemini-3.6-flash"
     ];
 
     let lastError = "";
 
     for (const model of models) {
 
-      try {
+      for (let attempt = 1; attempt <= 2; attempt++) {
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: "POST",
+        try {
 
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey
-            },
+          const controller = new AbortController();
 
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [
-                    {
-                      text: prompt
-                    }
-                  ]
+          const timeout = setTimeout(() => {
+            controller.abort();
+          }, 30000);
+
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey
+              },
+
+              signal: controller.signal,
+
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        text: prompt
+                      }
+                    ]
+                  }
+                ],
+
+                generationConfig: {
+                  maxOutputTokens: 4096
                 }
-              ],
+              })
+            }
+          );
 
-              generationConfig: {
-                maxOutputTokens: 4096,
+          clearTimeout(timeout);
 
-                thinkingConfig: {
-                  thinkingLevel: "low"
-                }
-              }
-            })
+          const data = await response.json();
+
+          if (response.ok) {
+
+            const result =
+              data?.candidates?.[0]?.content?.parts
+                ?.map(part => part.text || "")
+                .join("")
+                .trim();
+
+            if (result) {
+              return res.status(200).json({
+                success: true,
+                result: result
+              });
+            }
+
+            lastError = "Gemini returned an empty response.";
+
+          } else {
+
+            lastError =
+              data?.error?.message ||
+              `HTTP ${response.status}`;
+
+            console.error(
+              `Gemini ${model}, attempt ${attempt}:`,
+              lastError
+            );
+
+            /*
+             * Retry temporary errors.
+             */
+            const temporaryError =
+              response.status === 429 ||
+              response.status === 500 ||
+              response.status === 502 ||
+              response.status === 503 ||
+              response.status === 504;
+
+            if (!temporaryError) {
+              return res.status(response.status).json({
+                error: "Gemini API error: " + lastError
+              });
+            }
           }
-        );
 
-        const data = await response.json();
+        } catch (error) {
 
-        if (response.ok) {
+          lastError =
+            error?.name === "AbortError"
+              ? "Gemini request timed out."
+              : error?.message || "Network request failed.";
 
-          const result =
-            data?.candidates?.[0]?.content?.parts
-              ?.map(part => part.text || "")
-              .join("")
-              .trim();
-
-          if (result) {
-            return res.status(200).json({
-              success: true,
-              result: result
-            });
-          }
-
-          lastError = "Gemini returned an empty response.";
-
-          continue;
+          console.error(
+            `Gemini ${model}, attempt ${attempt}:`,
+            lastError
+          );
         }
-
-        lastError =
-          data?.error?.message ||
-          `HTTP ${response.status}`;
-
-        console.error(
-          `Gemini ${model} failed:`,
-          lastError
-        );
 
         /*
-         * Try the next model for temporary
-         * capacity/server errors.
+         * Short delay before retry.
          */
-        if (
-          response.status === 429 ||
-          response.status === 500 ||
-          response.status === 502 ||
-          response.status === 503 ||
-          response.status === 504
-        ) {
-          continue;
+        if (attempt < 2) {
+          await new Promise(resolve => {
+            setTimeout(resolve, 1500);
+          });
         }
-
-        return res.status(response.status).json({
-          error: "Gemini API error: " + lastError
-        });
-
-      } catch (error) {
-
-        lastError =
-          error?.message ||
-          "Network request failed.";
-
-        console.error(
-          `Gemini ${model} error:`,
-          lastError
-        );
-
-        continue;
       }
     }
 
+    /*
+     * Both stable models failed after retries.
+     */
     return res.status(503).json({
       error:
-        "AI Fix service is temporarily unavailable.",
-      details: lastError
+        "AI service is temporarily busy. Please try again shortly."
     });
 
   } catch (error) {
 
-    console.error(
-      "Fix API error:",
-      error
-    );
+    console.error("Fix API error:", error);
 
     return res.status(500).json({
       error:
-        "Server error: " +
-        (error?.message || "Unknown error")
+        "Server error while generating the code fix."
     });
   }
 }
