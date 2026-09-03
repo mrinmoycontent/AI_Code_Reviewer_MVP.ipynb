@@ -55,79 +55,86 @@ You are an expert ${language} developer.
 Review and fix the following ${language} code.
 
 Preserve the original purpose of the program.
-Only fix genuine bugs and improve obvious code quality issues.
+Identify genuine bugs and correct them.
+Do not add unnecessary complexity.
 
 Return exactly:
 
 SUMMARY:
-Explain the problem and how you fixed it.
+Explain the problem and fix.
 
 FIXED CODE:
-Provide the complete corrected code inside a markdown code block.
+Provide the complete corrected code in a markdown code block.
 
 CHANGES:
 List the important changes.
 
-CODE:
-\`\`\`
+Code:
+\`\`\`${language}
 ${code}
 \`\`\`
 `;
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-      {
-        method: "POST",
+    const models = [
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash"
+    ];
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: prompt
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
                 }
               ]
-            }
-          ]
-        })
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const result =
+            data?.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || "")
+              .join("")
+              .trim();
+
+          if (result) {
+            return res.status(200).json({
+              success: true,
+              result: result
+            });
+          }
+        }
+
+        console.error(
+          `${model} failed:`,
+          data?.error?.message || response.status
+        );
+
+      } catch (error) {
+        console.error(`${model} request failed:`, error);
       }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Gemini API response:", data);
-
-      return res.status(response.status).json({
-        error:
-          "Gemini API error: " +
-          (
-            data?.error?.message ||
-            `HTTP ${response.status}`
-          )
-      });
     }
 
-    const result =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
-
-    if (!result) {
-      return res.status(502).json({
-        error: "Gemini returned an empty response."
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      result: result
+    return res.status(503).json({
+      error:
+        "⚠️ AI Fix is temporarily unavailable. Please try again shortly."
     });
 
   } catch (error) {
