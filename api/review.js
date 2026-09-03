@@ -8,91 +8,58 @@ export default async function handler(req, res) {
   try {
     const { code, language } = req.body || {};
 
-    // Basic protection against unnecessarily large requests
     if (!code || typeof code !== "string") {
       return res.status(400).json({
-        error: "Please provide valid code."
+        error: "Please provide code to review."
       });
     }
 
-    if (code.length > 12000) {
+    if (!language || typeof language !== "string") {
       return res.status(400).json({
-        error: "Code is too long. Please keep it under 12,000 characters."
+        error: "Please select a programming language."
       });
     }
 
-    const allowedLanguages = [
-      "Python",
-      "JavaScript",
-      "Java",
-      "C#",
-      "C++",
-      "SQL"
-    ];
+    const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!allowedLanguages.includes(language)) {
-      return res.status(400).json({
-        error: "Unsupported programming language."
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "AI service is not configured."
       });
     }
 
-    const prompt = `
-You are an expert software code reviewer.
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text:
+                    `You are an expert software code reviewer.
 
-Programming language: ${language}
-
-Review the following code:
-
---- CODE START ---
-${code}
---- CODE END ---
+Review the following ${language} code.
 
 Identify:
-
 1. Bugs
 2. Security issues
 3. Code quality problems
 4. Performance issues
 5. Recommended improvements
 
-For each genuine issue provide:
+Give a clear, structured review and an overall code quality score out of 100.
 
-Severity: Critical / High / Medium / Low
-Problem:
-Explanation:
-Suggested Fix:
+Code:
 
-Do not invent problems.
-
-Finally provide:
-
-Final Code Quality Score: X/100
-`;
-
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "Gemini API key is not configured."
-      });
-    }
-
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
-        encodeURIComponent(apiKey),
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt
+\`\`\`${language}
+${code}
+\`\`\``
                 }
               ]
             }
@@ -104,30 +71,51 @@ Final Code Quality Score: X/100
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("Gemini API error:", data);
+
+      if (
+        response.status === 429 ||
+        response.status === 503 ||
+        response.status === 500
+      ) {
+        return res.status(503).json({
+          error:
+            "⚠️ AI service is temporarily busy. Please try again in a moment."
+        });
+      }
+
       return res.status(response.status).json({
         error:
           data?.error?.message ||
-          "Gemini request failed."
+          "Unable to get an AI review."
       });
     }
 
     const result =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
 
     if (!result) {
-      return res.status(500).json({
-        error: "Gemini returned an empty response."
+      return res.status(502).json({
+        error:
+          "⚠️ AI did not return a review. Please try again."
       });
     }
 
     return res.status(200).json({
-      result
+      success: true,
+      result: result
     });
 
   } catch (error) {
 
+    console.error("Review API error:", error);
+
     return res.status(500).json({
-      error: "Something went wrong while reviewing the code."
+      error:
+        "⚠️ Unable to connect to the AI service. Please try again."
     });
   }
 }
