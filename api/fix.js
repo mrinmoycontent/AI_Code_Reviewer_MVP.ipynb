@@ -14,9 +14,9 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!language || typeof language !== "string") {
+    if (code.length > 12000) {
       return res.status(400).json({
-        error: "Please select a programming language."
+        error: "Code is too long. Please keep it under 12,000 characters."
       });
     }
 
@@ -35,55 +35,50 @@ export default async function handler(req, res) {
       });
     }
 
-    if (code.length > 12000) {
-      return res.status(400).json({
-        error: "Code is too long."
-      });
-    }
+    const prompt = `
+You are an expert ${language} software developer.
+
+Improve the following ${language} code:
+
+--- CODE START ---
+${code}
+--- CODE END ---
+
+Fix genuine bugs and improve code quality.
+
+Do not change the purpose of the program.
+Do not add unnecessary complexity.
+
+Return:
+
+SUMMARY:
+Explain the improvements.
+
+FIXED CODE:
+Provide the complete corrected code.
+
+CHANGES:
+List the important changes.
+`;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "GEMINI_API_KEY is missing in Vercel."
+        error: "Gemini API key is not configured."
       });
     }
 
-    const prompt = `
-You are an expert ${language} developer.
-
-Review and fix the following ${language} code.
-
-Preserve the original purpose.
-
-Identify genuine bugs and correct them.
-
-Return exactly:
-
-SUMMARY:
-Explain the problem and fix.
-
-FIXED CODE:
-Provide the complete corrected code in a markdown code block.
-
-CHANGES:
-List the important changes.
-
-Code:
-
-\`\`\`${language}
-${code}
-\`\`\`
-`;
-
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
+        encodeURIComponent(apiKey),
       {
         method: "POST",
+
         headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
+          "Content-Type": "application/json"
         },
+
         body: JSON.stringify({
           contents: [
             {
@@ -101,23 +96,15 @@ ${code}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API response:", data);
-
-      return res.status(500).json({
+      return res.status(response.status).json({
         error:
-          "Gemini API error: " +
-          (
-            data?.error?.message ||
-            `HTTP ${response.status}`
-          )
+          data?.error?.message ||
+          "Gemini request failed."
       });
     }
 
     const result =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
+      data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!result) {
       return res.status(500).json({
@@ -126,17 +113,13 @@ ${code}
     }
 
     return res.status(200).json({
-      success: true,
-      result: result
+      result
     });
 
   } catch (error) {
-    console.error("Fix API error:", error);
 
     return res.status(500).json({
-      error:
-        "Server error: " +
-        (error?.message || "Unknown error")
+      error: "Something went wrong while generating the fix."
     });
   }
 }
