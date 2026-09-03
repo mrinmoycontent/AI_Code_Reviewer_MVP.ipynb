@@ -50,178 +50,96 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} developer.
+You are an expert software developer specializing in ${language}.
 
-Review and fix the following ${language} code.
+Review the user's ${language} code below.
 
-Preserve the original purpose of the program.
+Your tasks:
+1. Find genuine bugs.
+2. Fix the bugs.
+3. Preserve the original purpose of the program.
+4. Improve reliability where appropriate.
+5. Do not unnecessarily rewrite working code.
 
-Identify genuine bugs and correct them.
-
-Return exactly:
+Return exactly this format:
 
 SUMMARY:
-Explain the problem and how it was fixed.
+Briefly explain the problem and solution.
 
 FIXED CODE:
-Provide the complete corrected code inside a markdown code block.
+Return the COMPLETE corrected code inside one markdown code block.
 
 CHANGES:
-List the important changes.
+List the important changes made.
 
-CODE:
+USER CODE:
 
 \`\`\`${language}
 ${code}
 \`\`\`
 `;
 
-    /*
-      Try current stable Flash models in order.
-      If one is temporarily overloaded, try the next one.
-    */
-
-    const models = [
-      "gemini-3.8-flash",
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash"
-    ];
-
-    let errors = [];
-
-    for (const model of models) {
-
-      try {
-
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey
-            },
-
-            body: JSON.stringify({
-              contents: [
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
                 {
-                  role: "user",
-                  parts: [
-                    {
-                      text: prompt
-                    }
-                  ]
+                  text: prompt
                 }
               ]
-            })
+            }
+          ],
+          generationConfig: {
+            maxOutputTokens: 4096
           }
-        );
-
-        const data = await response.json();
-
-        /*
-          SUCCESS
-        */
-
-        if (response.ok) {
-
-          const result =
-            data?.candidates?.[0]?.content?.parts
-              ?.map(part => part.text || "")
-              .join("")
-              .trim();
-
-          if (result) {
-
-            return res.status(200).json({
-              success: true,
-              model: model,
-              result: result
-            });
-
-          }
-
-          errors.push(
-            `${model}: Empty response`
-          );
-
-          continue;
-        }
-
-        /*
-          TEMPORARY ERRORS
-          Try the next model.
-        */
-
-        if (
-          response.status === 429 ||
-          response.status === 500 ||
-          response.status === 502 ||
-          response.status === 503 ||
-          response.status === 504
-        ) {
-
-          errors.push(
-            `${model}: ${
-              data?.error?.message ||
-              `HTTP ${response.status}`
-            }`
-          );
-
-          continue;
-        }
-
-        /*
-          PERMANENT ERROR
-          Stop immediately.
-        */
-
-        return res.status(response.status).json({
-          error:
-            `Gemini API error (${model}): ` +
-            (
-              data?.error?.message ||
-              `HTTP ${response.status}`
-            )
-        });
-
-      } catch (error) {
-
-        errors.push(
-          `${model}: ${error?.message || "Request failed"}`
-        );
-
+        })
       }
-    }
-
-    /*
-      All models failed.
-    */
-
-    console.error(
-      "All Gemini models failed:",
-      errors
     );
 
-    return res.status(503).json({
-      error:
-        "Gemini is temporarily unavailable. " +
-        "All available Flash models were unavailable."
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Gemini error:", data);
+
+      return res.status(response.status).json({
+        error:
+          data?.error?.message ||
+          `Gemini API returned HTTP ${response.status}.`
+      });
+    }
+
+    const result = data?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
+
+    if (!result) {
+      return res.status(500).json({
+        error: "Gemini returned an empty response."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      result: result
     });
 
   } catch (error) {
-
-    console.error(
-      "Fix API error:",
-      error
-    );
+    console.error("Fix API error:", error);
 
     return res.status(500).json({
       error:
         "Server error: " +
-        (error?.message || "Unknown error")
+        (error?.message || "Unknown error.")
     });
   }
 }
