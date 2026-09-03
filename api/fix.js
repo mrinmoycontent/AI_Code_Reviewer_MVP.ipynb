@@ -54,9 +54,9 @@ You are an expert ${language} developer.
 
 Review and fix the following ${language} code.
 
-Preserve the original purpose of the program.
-Identify genuine bugs and correct them.
-Do not add unnecessary complexity.
+Preserve the original purpose.
+Fix genuine bugs.
+Do not unnecessarily rewrite working code.
 
 Return exactly:
 
@@ -64,13 +64,13 @@ SUMMARY:
 Explain the problem and fix.
 
 FIXED CODE:
-Provide the complete corrected code in a markdown code block.
+Provide the complete corrected code inside a markdown code block.
 
 CHANGES:
 List the important changes.
 
-Code:
-\`\`\`${language}
+CODE:
+\`\`\`
 ${code}
 \`\`\`
 `;
@@ -81,16 +81,20 @@ ${code}
       "gemini-3.5-flash"
     ];
 
+    let lastError = "Gemini service unavailable.";
+
     for (const model of models) {
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: "POST",
+
             headers: {
               "Content-Type": "application/json",
               "x-goog-api-key": apiKey
             },
+
             body: JSON.stringify({
               contents: [
                 {
@@ -120,21 +124,32 @@ ${code}
               result: result
             });
           }
+
+          lastError = "Gemini returned an empty response.";
+          continue;
         }
 
-        console.error(
-          `${model} failed:`,
-          data?.error?.message || response.status
-        );
+        lastError =
+          data?.error?.message ||
+          `HTTP ${response.status}`;
+
+        console.error(`${model} error:`, lastError);
 
       } catch (error) {
-        console.error(`${model} request failed:`, error);
+        lastError =
+          error?.message ||
+          "Request failed.";
+
+        console.error(`${model} request error:`, lastError);
       }
     }
 
     return res.status(503).json({
       error:
-        "⚠️ AI Fix is temporarily unavailable. Please try again shortly."
+        "⚠️ AI Fix service is temporarily unavailable. " +
+        "Please try again shortly.\n\n" +
+        "Details: " +
+        lastError
     });
 
   } catch (error) {
