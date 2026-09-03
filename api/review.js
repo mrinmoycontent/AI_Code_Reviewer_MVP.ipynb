@@ -8,9 +8,10 @@ export default async function handler(req, res) {
   try {
     const { code, language } = req.body || {};
 
+    // Validate input
     if (!code || typeof code !== "string") {
       return res.status(400).json({
-        error: "Please provide code to review."
+        error: "Please provide code to fix."
       });
     }
 
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Gemini API key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -29,33 +31,37 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert software code reviewer.
+You are an expert software engineer and code debugging assistant.
 
-Review the following ${language} code.
+Analyze the following ${language} code.
 
-Provide a professional structured review containing:
+Your task is to:
 
-1. Bugs
-2. Security Issues
-3. Code Quality Problems
-4. Performance Issues
-5. Recommended Improvements
-6. Improved Code
+1. Identify the bugs.
+2. Explain what is wrong.
+3. Correct the code.
+4. Preserve the original purpose and functionality.
+5. Improve obvious reliability or code-quality problems.
+6. Do not invent unnecessary changes.
 
-For the improved code, use this exact format:
+IMPORTANT:
+The corrected code MUST be provided using exactly this format:
 
 FIXED CODE:
 \`\`\`${language}
 [corrected code]
 \`\`\`
 
-Finally provide:
+After the corrected code, provide:
 
-Final Code Quality Score: X/100
+CHANGES:
+1. [change]
+2. [change]
+3. [change]
 
-Be accurate. Do not invent problems that are not present in the code.
+Make sure the corrected code is complete and directly usable.
 
-CODE TO REVIEW:
+CODE:
 
 \`\`\`${language}
 ${code}
@@ -68,100 +74,144 @@ ${code}
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-        {
-          method: "POST",
+      const controller = new AbortController();
 
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
-          },
+      // Prevent the request from hanging indefinitely
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 30000);
 
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    text: prompt
-                  }
-                ]
-              }
-            ]
-          })
-        }
-      );
+      try {
 
-      const data = await response.json();
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+          {
+            method: "POST",
 
-      if (response.ok) {
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
 
-        const result =
-          data?.candidates?.[0]?.content?.parts
-            ?.map(part => part.text || "")
-            .join("")
-            .trim();
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [
+                    {
+                      text: prompt
+                    }
+                  ]
+                }
+              ]
+            }),
 
-        if (result) {
-          return res.status(200).json({
-            success: true,
-            result: result
-          });
-        }
-
-        lastError = "Gemini returned an empty response.";
-
-      } else {
-
-        lastError =
-          data?.error?.message ||
-          "Gemini API request failed.";
-
-        console.error(
-          `Gemini attempt ${attempt}:`,
-          data
+            signal: controller.signal
+          }
         );
 
-        /*
-          Retry temporary server/capacity errors.
-        */
-        if (
-          response.status !== 429 &&
-          response.status !== 500 &&
-          response.status !== 502 &&
-          response.status !== 503 &&
-          response.status !== 504
-        ) {
-          return res.status(response.status).json({
-            error: lastError
-          });
+        clearTimeout(timeout);
+
+        const data = await response.json();
+
+        // Successful Gemini response
+        if (response.ok) {
+
+          const result =
+            data?.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || "")
+              .join("")
+              .trim();
+
+          if (result) {
+
+            return res.status(200).json({
+              success: true,
+              result: result
+            });
+
+          }
+
+          lastError = "Gemini returned an empty response.";
+
+        } else {
+
+          lastError =
+            data?.error?.message ||
+            "Gemini API request failed.";
+
+          console.error(
+            `Gemini Fix attempt ${attempt}:`,
+            data
+          );
+
+          // Retry temporary errors
+          if (
+            response.status !== 429 &&
+            response.status !== 500 &&
+            response.status !== 502 &&
+            response.status !== 503 &&
+            response.status !== 504
+          ) {
+
+            return res.status(response.status).json({
+              error: lastError
+            });
+
+          }
         }
+
+      } catch (error) {
+
+        clearTimeout(timeout);
+
+        if (error.name === "AbortError") {
+
+          lastError =
+            "Gemini request timed out.";
+
+          console.error(
+            `Gemini Fix attempt ${attempt} timed out.`
+          );
+
+        } else {
+
+          lastError = error.message;
+
+          console.error(
+            `Gemini Fix attempt ${attempt} error:`,
+            error
+          );
+
+        }
+
       }
 
-      /*
-        Wait before retrying.
-        1 second, then 2 seconds.
-      */
+      // Wait before retrying
       if (attempt < maxAttempts) {
+
         await new Promise(resolve =>
-          setTimeout(resolve, attempt * 1000)
+          setTimeout(resolve, attempt * 1500)
         );
+
       }
     }
 
     return res.status(503).json({
       error:
-        "⚠️ Gemini is temporarily unavailable. Please try again shortly."
+        "⚠️ AI fix service is temporarily unavailable. Please try again shortly."
     });
 
   } catch (error) {
 
-    console.error("Review API error:", error);
+    console.error(
+      "Fix API error:",
+      error
+    );
 
     return res.status(500).json({
       error:
-        "⚠️ Unable to connect to the AI service. Please try again."
+        "⚠️ Unable to connect to the AI fix service."
     });
   }
 }
