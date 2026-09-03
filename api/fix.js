@@ -14,6 +14,12 @@ export default async function handler(req, res) {
       });
     }
 
+    if (!language || typeof language !== "string") {
+      return res.status(400).json({
+        error: "Please select a programming language."
+      });
+    }
+
     if (code.length > 12000) {
       return res.status(400).json({
         error: "Code is too long. Please keep it under 12,000 characters."
@@ -39,31 +45,29 @@ export default async function handler(req, res) {
 
     if (!apiKey) {
       return res.status(500).json({
-        error: "GEMINI_API_KEY is not configured in Vercel."
+        error: "GEMINI_API_KEY is missing in Vercel."
       });
     }
 
     const prompt = `
-You are an expert ${language} software developer and debugging assistant.
+You are an expert ${language} developer.
 
-Analyze the following ${language} code.
+Review and fix the following ${language} code.
 
-Fix genuine bugs while preserving the original purpose of the program.
+Preserve the original purpose of the program.
+
+Identify genuine bugs and correct them.
 
 Return exactly:
 
 SUMMARY:
-Explain the problem and what you fixed.
+Explain the problem and how it was fixed.
 
 FIXED CODE:
 Provide the complete corrected code inside a markdown code block.
 
 CHANGES:
-1. Explain the first important change.
-2. Explain the second important change.
-3. Explain any other important change.
-
-Do not add unnecessary complexity.
+List the important changes.
 
 CODE:
 
@@ -73,19 +77,18 @@ ${code}
 `;
 
     /*
-      Try several current Gemini Flash models.
-      If one is temporarily overloaded, automatically
-      try the next model.
+      Try current stable Flash models in order.
+      If one is temporarily overloaded, try the next one.
     */
 
     const models = [
       "gemini-3.8-flash",
       "gemini-3.7-flash",
       "gemini-3.6-flash",
-      "gemini-3.5-flash-lite"
+      "gemini-3.5-flash"
     ];
 
-    let lastError = "";
+    let errors = [];
 
     for (const model of models) {
 
@@ -119,7 +122,7 @@ ${code}
         const data = await response.json();
 
         /*
-          Successful Gemini response
+          SUCCESS
         */
 
         if (response.ok) {
@@ -140,19 +143,16 @@ ${code}
 
           }
 
-          lastError =
-            `${model}: Gemini returned an empty response.`;
+          errors.push(
+            `${model}: Empty response`
+          );
 
           continue;
         }
 
         /*
-          Temporary Gemini errors:
-          429 = rate limit
-          500 = server error
-          502 = bad gateway
-          503 = overloaded/unavailable
-          504 = timeout
+          TEMPORARY ERRORS
+          Try the next model.
         */
 
         if (
@@ -163,21 +163,19 @@ ${code}
           response.status === 504
         ) {
 
-          lastError =
+          errors.push(
             `${model}: ${
               data?.error?.message ||
               `HTTP ${response.status}`
-            }`;
-
-          console.log(
-            `Gemini model ${model} unavailable. Trying next model.`
+            }`
           );
 
           continue;
         }
 
         /*
-          Permanent/API configuration error.
+          PERMANENT ERROR
+          Stop immediately.
         */
 
         return res.status(response.status).json({
@@ -191,25 +189,26 @@ ${code}
 
       } catch (error) {
 
-        lastError =
-          `${model}: ${error?.message || "Request failed."}`;
-
-        console.log(
-          `Gemini model ${model} request failed. Trying next model.`
+        errors.push(
+          `${model}: ${error?.message || "Request failed"}`
         );
 
-        continue;
       }
     }
 
     /*
-      Every fallback model failed.
+      All models failed.
     */
+
+    console.error(
+      "All Gemini models failed:",
+      errors
+    );
 
     return res.status(503).json({
       error:
-        "⚠️ Gemini is temporarily unavailable across the available Flash models. " +
-        "Please try again shortly."
+        "Gemini is temporarily unavailable. " +
+        "All available Flash models were unavailable."
     });
 
   } catch (error) {
@@ -222,7 +221,7 @@ ${code}
     return res.status(500).json({
       error:
         "Server error: " +
-        (error?.message || "Unknown error.")
+        (error?.message || "Unknown error")
     });
   }
 }
