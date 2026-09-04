@@ -50,27 +50,30 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert ${language} developer.
+You are an expert ${language} developer and code reviewer.
 
-Review and fix the following ${language} code.
+Review the following ${language} code.
 
-Find genuine bugs only.
-Preserve the original purpose.
-Do not invent problems.
-Return the complete corrected code.
+Your job:
+1. Identify genuine bugs or errors.
+2. Explain why they are problems.
+3. Provide the complete corrected code.
+4. Do not invent problems.
+5. Preserve the original purpose of the code.
+6. Do not add unnecessary features or changes.
 
-Return exactly:
+Return exactly this format:
 
 SUMMARY:
-Explain the problem and the fix.
+Explain the genuine problem(s) and how they were fixed.
 
 FIXED CODE:
-Provide the complete corrected code in a markdown code block.
+Provide the complete corrected code inside a markdown code block.
 
 CHANGES:
-List the important changes.
+List only the important changes made.
 
-CODE:
+CODE TO REVIEW:
 ${code}
 `;
 
@@ -78,12 +81,10 @@ ${code}
       "https://router.huggingface.co/v1/chat/completions",
       {
         method: "POST",
-
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
-
         body: JSON.stringify({
           model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
           messages: [
@@ -93,7 +94,7 @@ ${code}
             }
           ],
           max_tokens: 4096,
-          temperature: 0.2
+          temperature: 0.1
         })
       }
     );
@@ -132,7 +133,7 @@ ${code}
 
     return res.status(500).json({
       error:
-        "Server error: " +
+        "AI fix service error: " +
         (error?.message || "Unknown error")
     });
   }
