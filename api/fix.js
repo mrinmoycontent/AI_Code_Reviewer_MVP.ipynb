@@ -75,28 +75,51 @@ ${code}`;
       "https://router.huggingface.co/v1/chat/completions",
       {
         method: "POST",
+
         headers: {
-          Authorization: `Bearer ${hfToken}`,
+          "Authorization": `Bearer ${hfToken}`,
           "Content-Type": "application/json"
         },
+
         body: JSON.stringify({
           model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+
           messages: [
             {
               role: "user",
               content: prompt
             }
           ],
+
           max_tokens: 4096,
           temperature: 0.1
         })
       }
     );
 
-    const data = await response.json();
+    const responseText = await response.text();
+
+    let data;
+
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = {
+        error: responseText
+      };
+    }
 
     if (!response.ok) {
-      console.error("Hugging Face error:", data);
+
+      console.error(
+        "Hugging Face HTTP status:",
+        response.status
+      );
+
+      console.error(
+        "Hugging Face response:",
+        data
+      );
 
       return res.status(response.status).json({
         error:
@@ -110,10 +133,15 @@ ${code}`;
       data?.choices?.[0]?.message?.content?.trim();
 
     if (!result) {
-      console.error("Empty Hugging Face response:", data);
+
+      console.error(
+        "Empty Hugging Face response:",
+        data
+      );
 
       return res.status(500).json({
-        error: "Hugging Face returned an empty response."
+        error:
+          "Hugging Face returned an empty response."
       });
     }
 
@@ -123,7 +151,11 @@ ${code}`;
     });
 
   } catch (error) {
-    console.error("Fix API error:", error);
+
+    console.error(
+      "Fix API error:",
+      error
+    );
 
     return res.status(500).json({
       error:
