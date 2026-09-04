@@ -41,39 +41,36 @@ export default async function handler(req, res) {
       });
     }
 
-    const token = process.env.HF_TOKEN;
+    const hfToken = process.env.HF_TOKEN;
 
-    if (!token) {
+    if (!hfToken) {
       return res.status(500).json({
         error: "HF_TOKEN is missing in Vercel."
       });
     }
 
     const prompt = `
-You are an expert ${language} developer and code reviewer.
+You are an expert ${language} developer.
 
-Review the following ${language} code.
+Review and fix this ${language} code.
 
-Your job:
-1. Identify genuine bugs or errors.
-2. Explain why they are problems.
-3. Provide the complete corrected code.
-4. Do not invent problems.
-5. Preserve the original purpose of the code.
-6. Do not add unnecessary features or changes.
+Identify genuine bugs only.
+Preserve the original purpose.
+Do not invent problems.
+Return the complete corrected code.
 
-Return exactly this format:
+Use exactly this format:
 
 SUMMARY:
-Explain the genuine problem(s) and how they were fixed.
+Explain the problem and the fix.
 
 FIXED CODE:
-Provide the complete corrected code inside a markdown code block.
+Provide the complete corrected code in a markdown code block.
 
 CHANGES:
-List only the important changes made.
+List the important changes.
 
-CODE TO REVIEW:
+CODE:
 ${code}
 `;
 
@@ -82,7 +79,7 @@ ${code}
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`,
+          "Authorization": `Bearer ${hfToken}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -102,13 +99,13 @@ ${code}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Hugging Face API error:", data);
+      console.error("Hugging Face error:", data);
 
-      return res.status(response.status).json({
+      return res.status(500).json({
         error:
           data?.error ||
           data?.message ||
-          `Hugging Face API error: HTTP ${response.status}`
+          `Hugging Face request failed (${response.status}).`
       });
     }
 
@@ -125,7 +122,7 @@ ${code}
 
     return res.status(200).json({
       success: true,
-      result: result
+      result
     });
 
   } catch (error) {
