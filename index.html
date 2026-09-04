@@ -419,15 +419,9 @@ async function reviewCode() {
 
 async function generateFix() {
 
-  /*
-    Prevent another Generate Fix request
-    while the 30-second cooldown is active.
-  */
-
   if (fixCooldown) {
     return;
   }
-
 
   const code =
     document.getElementById("code").value.trim();
@@ -435,15 +429,10 @@ async function generateFix() {
   const language =
     document.getElementById("language").value;
 
-
   if (!code) {
-
     alert("Please enter some code.");
-
     return;
-
   }
-
 
   const loading =
     document.getElementById("loading");
@@ -454,7 +443,6 @@ async function generateFix() {
   const success =
     document.getElementById("successMessage");
 
-
   loading.textContent =
     "🛠️ AI is generating a fix...";
 
@@ -464,19 +452,15 @@ async function generateFix() {
 
   success.style.display = "none";
 
-
   document.getElementById(
     "applyButton"
   ).style.display = "none";
 
-
   setButtonsDisabled(true);
-
 
   try {
 
     const response = await fetch("/api/fix", {
-
       method: "POST",
 
       headers: {
@@ -487,45 +471,55 @@ async function generateFix() {
         code: code,
         language: language
       })
-
     });
 
-
     const data = await response.json();
-
 
     if (!response.ok) {
 
       if (response.status === 429) {
 
-        throw new Error(
-          "Too many requests. Please wait 30 seconds before trying again."
-        );
+        result.textContent =
+          "⚠️ AI service is temporarily busy.\n\n" +
+          "Please wait 30 seconds before trying again.";
+
+      } else {
+
+        result.textContent =
+          "❌ " +
+          (
+            data?.error ||
+            data?.message ||
+            `Fix generation failed (${response.status}).`
+          );
 
       }
 
-      throw new Error(
-        data.error ||
-        data.message ||
-        `Fix generation failed (${response.status}).`
-      );
+      result.style.display = "block";
 
+      return;
     }
 
+    const aiResult =
+      data?.result?.trim();
+
+    if (!aiResult) {
+
+      result.textContent =
+        "❌ No result was returned by the AI service.";
+
+      result.style.display = "block";
+
+      return;
+    }
 
     result.textContent =
-      data.result ||
-      data.message ||
-      "No result returned.";
+      aiResult;
 
     result.style.display = "block";
 
-
     latestFixedCode =
-      extractFixedCode(
-        data.result || ""
-      );
-
+      extractFixedCode(aiResult);
 
     if (latestFixedCode) {
 
@@ -535,41 +529,32 @@ async function generateFix() {
 
     }
 
-
-    loading.style.display = "none";
-
-
-    /*
-      Start cooldown after successful
-      Generate Fix request.
-    */
-
-    startFixCooldown();
-
-
   } catch (error) {
 
+    console.error(
+      "Generate Fix error:",
+      error
+    );
+
     result.textContent =
-      "❌ " + error.message;
+      "❌ AI fix service is temporarily unavailable. " +
+      "Please try again shortly.";
 
     result.style.display = "block";
 
+  } finally {
+
     loading.style.display = "none";
 
+    setButtonsDisabled(false);
 
     /*
-      Start cooldown after a failed AI
-      request too, so repeated requests
-      cannot hammer the API.
+      Keep the existing 30-second protection.
     */
-
     startFixCooldown();
 
   }
-
 }
-
-
 /* =========================================================
    START 30 SECOND COOLDOWN
    ========================================================= */
