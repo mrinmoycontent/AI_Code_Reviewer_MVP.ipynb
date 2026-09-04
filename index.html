@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>AI Code Reviewer</title>
+  <title>AI Code Reviewer & Auto-Fixer</title>
 
   <style>
     * {
@@ -13,60 +13,54 @@
 
     body {
       margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #f5f7fb;
-      color: #172033;
-    }
-
-    .header {
-      background: #111827;
-      color: white;
-      padding: 24px;
-      text-align: center;
-    }
-
-    .header h1 {
-      margin: 0 0 8px;
-      font-size: 30px;
-    }
-
-    .header p {
-      margin: 0;
-      color: #cbd5e1;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #eef2ff, #f8fafc);
+      color: #1e293b;
     }
 
     .container {
-      width: min(1100px, 94%);
-      margin: 30px auto;
+      max-width: 1050px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      color: #64748b;
+      font-size: 17px;
     }
 
     .card {
       background: white;
-      border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 22px;
-      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+      padding: 25px;
+      border-radius: 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
 
     label {
       display: block;
-      font-weight: 700;
+      font-weight: bold;
       margin-bottom: 8px;
     }
 
     select,
     textarea {
       width: 100%;
-      border: 1px solid #d1d5db;
+      padding: 14px;
+      border: 1px solid #cbd5e1;
       border-radius: 10px;
-      padding: 12px;
       font-size: 15px;
       outline: none;
-    }
-
-    select:focus,
-    textarea:focus {
-      border-color: #6366f1;
     }
 
     select {
@@ -75,35 +69,35 @@
     }
 
     textarea {
-      min-height: 300px;
+      min-height: 330px;
+      font-family: monospace;
       resize: vertical;
-      font-family: Consolas, Monaco, monospace;
       line-height: 1.5;
+    }
+
+    select:focus,
+    textarea:focus {
+      border-color: #6366f1;
     }
 
     .buttons {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      margin-top: 18px;
+      margin-top: 20px;
     }
 
     button {
-      border: 0;
+      border: none;
+      padding: 14px 22px;
       border-radius: 10px;
-      padding: 12px 20px;
       font-size: 15px;
-      font-weight: 700;
+      font-weight: bold;
       cursor: pointer;
     }
 
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
     .review {
-      background: #2563eb;
+      background: #4f46e5;
       color: white;
     }
 
@@ -112,382 +106,910 @@
       color: white;
     }
 
+    .apply {
+      background: #f59e0b;
+      color: white;
+      display: none;
+    }
+
     .run {
-      background: #7c3aed;
+      background: #0891b2;
       color: white;
     }
 
     .clear {
-      background: #e5e7eb;
-      color: #111827;
+      background: #64748b;
+      color: white;
     }
 
-    #status {
-      margin-top: 18px;
-      font-weight: 600;
-      white-space: pre-wrap;
+    button:hover {
+      opacity: 0.9;
     }
 
-    #result {
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .loading {
+      display: none;
       margin-top: 20px;
+      font-weight: bold;
+    }
+
+    #result,
+    #runResult {
+      display: none;
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
+
+    #runResult {
+      font-family: monospace;
       background: #0f172a;
       color: #e2e8f0;
-      border-radius: 12px;
-      padding: 20px;
-      min-height: 120px;
-      white-space: pre-wrap;
-      overflow-x: auto;
-      font-family: Consolas, Monaco, monospace;
-      line-height: 1.55;
+      padding: 18px;
+      border-radius: 10px;
+      margin-top: 15px;
     }
 
-    .result-title {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 12px;
+    .success {
+      display: none;
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #dcfce7;
+      color: #166534;
+      font-weight: bold;
+    }
+
+    .warning {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 14px;
     }
 
     .footer {
       text-align: center;
-      padding: 25px;
       color: #64748b;
-      font-size: 14px;
+      font-size: 13px;
+      margin-top: 30px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        margin: 15px auto;
+      }
+
+      .header h1 {
+        font-size: 30px;
+      }
+
+      .buttons {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
     }
   </style>
 </head>
 
 <body>
 
-  <header class="header">
-    <h1>AI Code Reviewer</h1>
-    <p>Review, fix and validate your code with AI</p>
-  </header>
+<div class="container">
 
-  <main class="container">
+  <div class="header">
+    <h1>🤖 AI Code Reviewer & Auto-Fixer</h1>
+    <p>Review, analyze, fix and test your code with AI.</p>
+  </div>
 
-    <section class="card">
+  <div class="card">
 
-      <label for="language">Programming Language</label>
+    <label for="language">Programming Language</label>
 
-      <select id="language">
-        <option value="Python">Python</option>
-        <option value="JavaScript">JavaScript</option>
-        <option value="Java">Java</option>
-        <option value="C#">C#</option>
-        <option value="C++">C++</option>
-        <option value="SQL">SQL</option>
-      </select>
+    <select id="language">
+      <option>Python</option>
+      <option>JavaScript</option>
+      <option>Java</option>
+      <option>C#</option>
+      <option>C++</option>
+      <option>SQL</option>
+    </select>
 
-      <label for="code">Your Code</label>
+    <label for="code">Your Code</label>
 
-      <textarea
-        id="code"
-        placeholder="Paste your code here..."
-      ></textarea>
+    <textarea id="code"></textarea>
 
-      <div class="buttons">
+    <div class="buttons">
 
-        <button
-          id="reviewBtn"
-          class="review"
-          onclick="reviewCode()"
-        >
-          Review Code
-        </button>
+      <button
+        id="reviewButton"
+        class="review"
+        onclick="reviewCode()">
+        🔍 Review Code
+      </button>
 
-        <button
-          id="fixBtn"
-          class="fix"
-          onclick="fixCode()"
-        >
-          Generate Fix
-        </button>
+      <button
+        id="fixButton"
+        class="fix"
+        onclick="generateFix()">
+        🛠️ Generate Fix
+      </button>
 
-        <button
-          id="runBtn"
-          class="run"
-          onclick="testCode()"
-        >
-          Test Code
-        </button>
+      <button
+        id="applyButton"
+        class="apply"
+        onclick="applyFix()">
+        ✅ Apply Fix
+      </button>
 
-        <button
-          class="clear"
-          onclick="clearAll()"
-        >
-          Clear
-        </button>
+      <button
+        id="runButton"
+        class="run"
+        onclick="runCode()">
+        ▶️ Run / Test
+      </button>
 
-      </div>
+      <button
+        id="clearButton"
+        class="clear"
+        onclick="clearAll()">
+        🗑️ Clear
+      </button>
 
-      <div id="status"></div>
+    </div>
 
-    </section>
-
-    <section class="card">
+    <div class="loading" id="loading">
+      🤖 AI is working...
+    </div>
 
-      <div class="result-title">
-        Result
-      </div>
+    <div class="success" id="successMessage">
+      ✅ Fixed code has been applied to the editor.
+    </div>
 
-      <div id="result">
-        Your AI result will appear here.
-      </div>
+  </div>
 
-    </section>
 
-  </main>
+  <div class="card">
 
-  <footer class="footer">
-    AI Code Reviewer MVP
-  </footer>
+    <h2>📋 AI Review</h2>
 
-  <script>
+    <div id="result">
+      Your AI result will appear here.
+    </div>
 
-    const codeInput = document.getElementById("code");
-    const languageInput = document.getElementById("language");
+  </div>
 
-    const reviewBtn = document.getElementById("reviewBtn");
-    const fixBtn = document.getElementById("fixBtn");
-    const runBtn = document.getElementById("runBtn");
 
-    const statusBox = document.getElementById("status");
-    const resultBox = document.getElementById("result");
+  <div class="card">
 
-    let fixCooldown = false;
-    let fixCooldownTimer = null;
+    <h2>▶️ Test Result</h2>
 
-    function setLoading(loading, message = "") {
+    <div class="warning">
+      ⚠️ Safe test mode is enabled. User code is not executed directly
+      on the server.
+    </div>
 
-      reviewBtn.disabled = loading;
-      runBtn.disabled = loading;
+    <div id="runResult"></div>
 
-      /*
-        Do not overwrite the Generate Fix button
-        during its 30-second cooldown.
-      */
-      if (!fixCooldown) {
-        fixBtn.disabled = loading;
-      }
+  </div>
 
-      statusBox.textContent = message;
-    }
 
-    function getInput() {
+  <div class="footer">
+    AI Code Reviewer & Auto-Fixer • Portfolio Project
+  </div>
 
-      const code = codeInput.value.trim();
-      const language = languageInput.value;
+</div>
 
-      if (!code) {
-        throw new Error("Please enter some code first.");
-      }
 
-      return {
-        code,
-        language
-      };
-    }
+<script>
 
-    async function callAPI(endpoint) {
+let latestFixedCode = "";
 
-      const input = getInput();
+/*
+=========================================================
+GENERATE FIX COOLDOWN
+=========================================================
+*/
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(input)
-      });
+let fixCooldown = false;
+let fixCooldownTimer = null;
 
-      let data;
 
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error(
-          `Server returned an invalid response (${response.status}).`
-        );
-      }
+/*
+=========================================================
+REVIEW CODE
+=========================================================
+*/
 
-      if (!response.ok) {
+async function reviewCode() {
 
-        if (response.status === 429) {
-          throw new Error(
-            "Too many requests. Please wait 30 seconds before trying again."
-          );
-        }
+  const code =
+    document.getElementById("code").value.trim();
 
-        throw new Error(
-          data?.error ||
-          data?.message ||
-          `Request failed with HTTP ${response.status}.`
-        );
-      }
+  const language =
+    document.getElementById("language").value;
 
-      return data;
-    }
+  if (!code) {
+    alert("Please enter some code.");
+    return;
+  }
 
-    async function reviewCode() {
+  const loading =
+    document.getElementById("loading");
 
-      try {
+  const result =
+    document.getElementById("result");
 
-        setLoading(true, "Reviewing your code...");
+  loading.textContent =
+    "🔍 AI is reviewing your code...";
 
-        resultBox.textContent = "";
+  loading.style.display = "block";
 
-        const data = await callAPI("/api/review");
+  result.style.display = "none";
 
-        resultBox.textContent =
-          data.result ||
-          data.message ||
-          data.error ||
-          "No result returned.";
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
 
-        setLoading(false, "Review completed.");
+  setButtonsDisabled(true);
 
-      } catch (error) {
+  try {
 
-        setLoading(false);
+    const response = await fetch("/api/review", {
 
-        resultBox.textContent =
-          "❌ " + error.message;
+      method: "POST",
 
-        statusBox.textContent =
-          "Review failed.";
-      }
-    }
+      headers: {
+        "Content-Type": "application/json"
+      },
 
-    async function fixCode() {
-
-      if (fixCooldown) {
-        return;
-      }
-
-      try {
-
-        setLoading(true, "Generating fix...");
-
-        resultBox.textContent = "";
-
-        const data = await callAPI("/api/fix");
-
-        resultBox.textContent =
-          data.result ||
-          data.message ||
-          data.error ||
-          "No result returned.";
-
-        setLoading(false, "Fix generated successfully.");
-
-        startFixCooldown();
-
-      } catch (error) {
-
-        setLoading(false);
-
-        resultBox.textContent =
-          "❌ " + error.message;
-
-        statusBox.textContent =
-          "Please wait before trying again.";
-
-        startFixCooldown();
-      }
-    }
-
-    function startFixCooldown() {
-
-      fixCooldown = true;
-
-      let seconds = 30;
-
-      fixBtn.disabled = true;
-      fixBtn.textContent = `Wait ${seconds}s...`;
-
-      if (fixCooldownTimer) {
-        clearInterval(fixCooldownTimer);
-      }
-
-      fixCooldownTimer = setInterval(() => {
-
-        seconds--;
-
-        if (seconds <= 0) {
-
-          clearInterval(fixCooldownTimer);
-
-          fixCooldownTimer = null;
-          fixCooldown = false;
-
-          fixBtn.disabled = false;
-          fixBtn.textContent = "Generate Fix";
-
-          statusBox.textContent = "";
-
-          return;
-        }
-
-        fixBtn.textContent = `Wait ${seconds}s...`;
-
-      }, 1000);
-    }
-
-    async function testCode() {
-
-      try {
-
-        setLoading(true, "Testing code...");
-
-        resultBox.textContent = "";
-
-        const data = await callAPI("/api/run");
-
-        resultBox.textContent =
-          data.result ||
-          data.message ||
-          data.error ||
-          "Code received successfully.";
-
-        setLoading(false, "Test completed.");
-
-      } catch (error) {
-
-        setLoading(false);
-
-        resultBox.textContent =
-          "❌ " + error.message;
-
-        statusBox.textContent =
-          "Test failed.";
-      }
-    }
-
-    function clearAll() {
-
-      codeInput.value = "";
-
-      resultBox.textContent =
-        "Your AI result will appear here.";
-
-      statusBox.textContent = "";
-    }
-
-    codeInput.addEventListener("keydown", function(event) {
-
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key === "Enter"
-      ) {
-
-        event.preventDefault();
-
-        fixCode();
-      }
+      body: JSON.stringify({
+        code: code,
+        language: language
+      })
 
     });
 
-  </script>
+    const data = await response.json();
+
+    if (!response.ok) {
+
+      if (response.status === 429) {
+
+        throw new Error(
+          "Too many requests. Please wait a few seconds before trying again."
+        );
+
+      }
+
+      throw new Error(
+        data.error ||
+        data.message ||
+        "Review failed."
+      );
+
+    }
+
+    result.textContent =
+      data.result ||
+      data.message ||
+      "No result returned.";
+
+    result.style.display = "block";
+
+  } catch (error) {
+
+    result.textContent =
+      "❌ " + error.message;
+
+    result.style.display = "block";
+
+  } finally {
+
+    loading.style.display = "none";
+
+    setButtonsDisabled(false);
+
+  }
+
+}
+
+
+/*
+=========================================================
+GENERATE FIX
+=========================================================
+*/
+
+async function generateFix() {
+
+  /*
+    Prevent back-to-back AI requests.
+  */
+
+  if (fixCooldown) {
+
+    return;
+
+  }
+
+
+  const code =
+    document.getElementById("code").value.trim();
+
+  const language =
+    document.getElementById("language").value;
+
+
+  if (!code) {
+
+    alert("Please enter some code.");
+
+    return;
+
+  }
+
+
+  const loading =
+    document.getElementById("loading");
+
+  const result =
+    document.getElementById("result");
+
+  const success =
+    document.getElementById("successMessage");
+
+
+  loading.textContent =
+    "🛠️ AI is generating a fix...";
+
+  loading.style.display = "block";
+
+  result.style.display = "none";
+
+  success.style.display = "none";
+
+
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
+
+
+  setButtonsDisabled(true);
+
+
+  try {
+
+    const response = await fetch("/api/fix", {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+
+        code: code,
+
+        language: language
+
+      })
+
+    });
+
+
+    const data = await response.json();
+
+
+    if (!response.ok) {
+
+      /*
+        Handle Hugging Face rate limits
+        professionally.
+      */
+
+      if (response.status === 429) {
+
+        throw new Error(
+          "Too many requests. Please wait 30 seconds before trying again."
+        );
+
+      }
+
+
+      throw new Error(
+
+        data.error ||
+
+        data.message ||
+
+        `Fix generation failed (${response.status}).`
+
+      );
+
+    }
+
+
+    result.textContent =
+
+      data.result ||
+
+      data.message ||
+
+      "No result returned.";
+
+
+    result.style.display = "block";
+
+
+    latestFixedCode =
+
+      extractFixedCode(
+        data.result || ""
+      );
+
+
+    if (latestFixedCode) {
+
+      document.getElementById(
+        "applyButton"
+      ).style.display = "inline-block";
+
+    }
+
+
+    loading.style.display = "none";
+
+
+    /*
+      Start the professional
+      30-second cooldown.
+    */
+
+    startFixCooldown();
+
+
+  } catch (error) {
+
+
+    result.textContent =
+      "❌ " + error.message;
+
+
+    result.style.display = "block";
+
+
+    loading.style.display = "none";
+
+
+    /*
+      Also start cooldown after an AI
+      request fails. This prevents the
+      user from immediately sending
+      repeated requests.
+    */
+
+    startFixCooldown();
+
+  }
+
+}
+
+
+/*
+=========================================================
+30 SECOND FIX COOLDOWN
+=========================================================
+*/
+
+function startFixCooldown() {
+
+  fixCooldown = true;
+
+  let seconds = 30;
+
+
+  const fixButton =
+    document.getElementById("fixButton");
+
+
+  /*
+    Disable Generate Fix only.
+  */
+
+  fixButton.disabled = true;
+
+
+  fixButton.textContent =
+    `⏳ Wait ${seconds}s...`;
+
+
+  if (fixCooldownTimer) {
+
+    clearInterval(
+      fixCooldownTimer
+    );
+
+  }
+
+
+  fixCooldownTimer =
+
+    setInterval(() => {
+
+
+      seconds--;
+
+
+      if (seconds <= 0) {
+
+
+        clearInterval(
+          fixCooldownTimer
+        );
+
+
+        fixCooldownTimer = null;
+
+
+        fixCooldown = false;
+
+
+        fixButton.disabled = false;
+
+
+        fixButton.textContent =
+          "🛠️ Generate Fix";
+
+
+        return;
+
+      }
+
+
+      fixButton.textContent =
+        `⏳ Wait ${seconds}s...`;
+
+
+    }, 1000);
+
+}
+
+
+/*
+=========================================================
+EXTRACT FIXED CODE
+=========================================================
+*/
+
+function extractFixedCode(text) {
+
+  const match = text.match(
+
+    /FIXED CODE:\s*```(?:python|javascript|java|csharp|cpp|sql)?\s*([\s\S]*?)```/i
+
+  );
+
+
+  if (match) {
+
+    return match[1].trim();
+
+  }
+
+
+  return "";
+
+}
+
+
+/*
+=========================================================
+APPLY FIX
+=========================================================
+*/
+
+function applyFix() {
+
+  if (!latestFixedCode) {
+
+    alert(
+      "No corrected code is available."
+    );
+
+    return;
+
+  }
+
+
+  document.getElementById(
+    "code"
+  ).value = latestFixedCode;
+
+
+  document.getElementById(
+    "successMessage"
+  ).style.display = "block";
+
+
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
+
+
+  document.getElementById(
+    "runResult"
+  ).style.display = "none";
+
+
+  window.scrollTo({
+
+    top: 0,
+
+    behavior: "smooth"
+
+  });
+
+}
+
+
+/*
+=========================================================
+RUN / TEST CODE
+=========================================================
+*/
+
+async function runCode() {
+
+  const code =
+    document.getElementById("code").value.trim();
+
+  const language =
+    document.getElementById("language").value;
+
+
+  if (!code) {
+
+    alert(
+      "Please enter some code."
+    );
+
+    return;
+
+  }
+
+
+  const loading =
+    document.getElementById("loading");
+
+
+  const runResult =
+    document.getElementById("runResult");
+
+
+  loading.textContent =
+    "▶️ Testing your code...";
+
+
+  loading.style.display = "block";
+
+
+  runResult.style.display = "none";
+
+
+  setButtonsDisabled(true);
+
+
+  try {
+
+    const response =
+      await fetch("/api/run", {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+          code: code,
+
+          language: language
+
+        })
+
+      });
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      if (response.status === 429) {
+
+        throw new Error(
+          "Too many requests. Please wait before trying again."
+        );
+
+      }
+
+
+      throw new Error(
+
+        data.error ||
+        data.message ||
+        "Code test failed."
+
+      );
+
+    }
+
+
+    runResult.textContent =
+
+      "TEST RESULT: " +
+      (
+        data.status ||
+        "PASSED"
+      ) +
+
+      "\n\n" +
+
+      (
+        data.message ||
+        "Test completed successfully."
+      ) +
+
+      "\n\n" +
+
+      "Language: " +
+      (
+        data.language ||
+        language
+      );
+
+
+    runResult.style.display =
+      "block";
+
+
+  } catch (error) {
+
+
+    runResult.textContent =
+
+      "❌ Test failed.\n\n" +
+
+      error.message;
+
+
+    runResult.style.display =
+      "block";
+
+
+  } finally {
+
+
+    loading.style.display =
+      "none";
+
+
+    setButtonsDisabled(false);
+
+  }
+
+}
+
+
+/*
+=========================================================
+CLEAR EVERYTHING
+=========================================================
+*/
+
+function clearAll() {
+
+  document.getElementById(
+    "code"
+  ).value = "";
+
+
+  document.getElementById(
+    "result"
+  ).textContent =
+    "Your AI result will appear here.";
+
+
+  document.getElementById(
+    "result"
+  ).style.display = "none";
+
+
+  document.getElementById(
+    "runResult"
+  ).textContent = "";
+
+
+  document.getElementById(
+    "runResult"
+  ).style.display = "none";
+
+
+  document.getElementById(
+    "applyButton"
+  ).style.display = "none";
+
+
+  document.getElementById(
+    "successMessage"
+  ).style.display = "none";
+
+
+  document.getElementById(
+    "loading"
+  ).style.display = "none";
+
+
+  latestFixedCode = "";
+
+}
+
+
+/*
+=========================================================
+BUTTON CONTROL
+=========================================================
+*/
+
+function setButtonsDisabled(disabled) {
+
+  document.getElementById(
+    "reviewButton"
+  ).disabled = disabled;
+
+
+  /*
+    IMPORTANT:
+    Do NOT overwrite the 30-second
+    Generate Fix cooldown.
+  */
+
+  if (!fixCooldown) {
+
+    document.getElementById(
+      "fixButton"
+    ).disabled = disabled;
+
+  }
+
+
+  document.getElementById(
+    "applyButton"
+  ).disabled = disabled;
+
+
+  document.getElementById(
+    "runButton"
+  ).disabled = disabled;
+
+
+  document.getElementById(
+    "clearButton"
+  ).disabled = disabled;
+
+}
+
+</script>
 
 </body>
 </html>
