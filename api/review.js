@@ -8,10 +8,9 @@ export default async function handler(req, res) {
   try {
     const { code, language } = req.body || {};
 
-    // Validate input
     if (!code || typeof code !== "string") {
       return res.status(400).json({
-        error: "Please provide code to fix."
+        error: "Please provide code to review."
       });
     }
 
@@ -21,7 +20,27 @@ export default async function handler(req, res) {
       });
     }
 
-    // Gemini API key
+    const allowedLanguages = [
+      "Python",
+      "JavaScript",
+      "Java",
+      "C#",
+      "C++",
+      "SQL"
+    ];
+
+    if (!allowedLanguages.includes(language)) {
+      return res.status(400).json({
+        error: "Unsupported programming language."
+      });
+    }
+
+    if (code.length > 12000) {
+      return res.status(400).json({
+        error: "Code is too long."
+      });
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -31,187 +50,93 @@ export default async function handler(req, res) {
     }
 
     const prompt = `
-You are an expert software engineer and code debugging assistant.
+You are an expert software engineer and code reviewer.
 
-Analyze the following ${language} code.
+Review the following ${language} code.
 
-Your task is to:
+Identify genuine bugs and important problems only.
+Do not invent problems.
+Preserve the original purpose of the code.
 
-1. Identify the bugs.
-2. Explain what is wrong.
-3. Correct the code.
-4. Preserve the original purpose and functionality.
-5. Improve obvious reliability or code-quality problems.
-6. Do not invent unnecessary changes.
+Return the result using this format:
 
-IMPORTANT:
-The corrected code MUST be provided using exactly this format:
+SUMMARY:
+Briefly explain whether there are genuine issues.
 
-FIXED CODE:
-\`\`\`${language}
-[corrected code]
-\`\`\`
+ISSUES:
+List the genuine bugs or important problems.
+If there are none, say:
+No genuine bugs found.
 
-After the corrected code, provide:
-
-CHANGES:
-1. [change]
-2. [change]
-3. [change]
-
-Make sure the corrected code is complete and directly usable.
+SUGGESTIONS:
+List useful improvements only when appropriate.
 
 CODE:
-
-\`\`\`${language}
 ${code}
-\`\`\`
 `;
 
-    const maxAttempts = 3;
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+      {
+        method: "POST",
 
-    let lastError = null;
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-
-      const controller = new AbortController();
-
-      // Prevent the request from hanging indefinitely
-      const timeout = setTimeout(() => {
-        controller.abort();
-      }, 30000);
-
-      try {
-
-        const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey
-            },
-
-            body: JSON.stringify({
-              contents: [
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
                 {
-                  role: "user",
-                  parts: [
-                    {
-                      text: prompt
-                    }
-                  ]
+                  text: prompt
                 }
               ]
-            }),
-
-            signal: controller.signal
-          }
-        );
-
-        clearTimeout(timeout);
-
-        const data = await response.json();
-
-        // Successful Gemini response
-        if (response.ok) {
-
-          const result =
-            data?.candidates?.[0]?.content?.parts
-              ?.map(part => part.text || "")
-              .join("")
-              .trim();
-
-          if (result) {
-
-            return res.status(200).json({
-              success: true,
-              result: result
-            });
-
-          }
-
-          lastError = "Gemini returned an empty response.";
-
-        } else {
-
-          lastError =
-            data?.error?.message ||
-            "Gemini API request failed.";
-
-          console.error(
-            `Gemini Fix attempt ${attempt}:`,
-            data
-          );
-
-          // Retry temporary errors
-          if (
-            response.status !== 429 &&
-            response.status !== 500 &&
-            response.status !== 502 &&
-            response.status !== 503 &&
-            response.status !== 504
-          ) {
-
-            return res.status(response.status).json({
-              error: lastError
-            });
-
-          }
-        }
-
-      } catch (error) {
-
-        clearTimeout(timeout);
-
-        if (error.name === "AbortError") {
-
-          lastError =
-            "Gemini request timed out.";
-
-          console.error(
-            `Gemini Fix attempt ${attempt} timed out.`
-          );
-
-        } else {
-
-          lastError = error.message;
-
-          console.error(
-            `Gemini Fix attempt ${attempt} error:`,
-            error
-          );
-
-        }
-
+            }
+          ]
+        })
       }
+    );
 
-      // Wait before retrying
-      if (attempt < maxAttempts) {
+    const data = await response.json();
 
-        await new Promise(resolve =>
-          setTimeout(resolve, attempt * 1500)
-        );
+    if (!response.ok) {
+      console.error("Gemini Review error:", data);
 
-      }
+      return res.status(response.status).json({
+        error:
+          data?.error?.message ||
+          data?.error ||
+          "Gemini review request failed."
+      });
     }
 
-    return res.status(503).json({
-      error:
-        "⚠️ AI fix service is temporarily unavailable. Please try again shortly."
+    const result =
+      data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
+
+    if (!result) {
+      return res.status(500).json({
+        error: "Gemini returned an empty review."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      result
     });
 
   } catch (error) {
-
-    console.error(
-      "Fix API error:",
-      error
-    );
+    console.error("Review API error:", error);
 
     return res.status(500).json({
       error:
-        "⚠️ Unable to connect to the AI fix service."
+        "AI review service error: " +
+        (error?.message || "Unknown error")
     });
   }
 }
