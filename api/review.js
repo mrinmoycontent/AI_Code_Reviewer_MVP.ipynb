@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
     if (!code || typeof code !== "string") {
       return res.status(400).json({
-        error: "Please provide code to review."
+        error: "Please provide valid code."
       });
     }
 
@@ -49,26 +49,25 @@ export default async function handler(req, res) {
       });
     }
 
-    const prompt = `You are an expert ${language} developer and code reviewer.
+    const prompt = `You are an expert ${language} code reviewer.
 
 Review the following ${language} code.
 
 Identify genuine bugs only.
 Do not invent problems.
-Preserve the original purpose of the code.
+Preserve the original purpose.
 
-Return your answer using exactly this format:
+Return:
 
 SUMMARY:
-Explain the problem briefly.
+Brief explanation.
 
 ISSUES:
-List genuine bugs found.
-If there are no genuine bugs, say:
-No genuine bugs found.
+List genuine issues.
+If there are none, say "No genuine bugs found."
 
 SUGGESTIONS:
-List important improvements only when appropriate.
+List important improvements only.
 
 CODE:
 ${code}`;
@@ -77,43 +76,37 @@ ${code}`;
       "https://router.huggingface.co/v1/chat/completions",
       {
         method: "POST",
-
         headers: {
           "Authorization": `Bearer ${hfToken}`,
           "Content-Type": "application/json"
         },
-
         body: JSON.stringify({
           model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-
           messages: [
             {
               role: "user",
               content: prompt
             }
           ],
-
           max_tokens: 4096,
           temperature: 0.1
         })
       }
     );
 
-    const responseText = await response.text();
+    const text = await response.text();
 
     let data;
 
     try {
-      data = JSON.parse(responseText);
+      data = JSON.parse(text);
     } catch {
-      data = {
-        error: responseText
-      };
+      data = { error: text };
     }
 
     if (!response.ok) {
       console.error(
-        "Hugging Face Review error:",
+        "Hugging Face Review Error:",
         response.status,
         data
       );
@@ -130,26 +123,18 @@ ${code}`;
       data?.choices?.[0]?.message?.content?.trim();
 
     if (!result) {
-      console.error(
-        "Empty Hugging Face Review response:",
-        data
-      );
-
       return res.status(500).json({
-        error: "Hugging Face returned an empty review."
+        error: "Hugging Face returned an empty response."
       });
     }
 
     return res.status(200).json({
       success: true,
-      result: result
+      result
     });
 
   } catch (error) {
-    console.error(
-      "Review API error:",
-      error
-    );
+    console.error("Review API Error:", error);
 
     return res.status(500).json({
       error:
